@@ -3,13 +3,15 @@ package main
 import (
 	_ "embed"
 
-	_ "github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/pubgo/fastcommit/bootstrap"
+	"github.com/pubgo/funk/v2/buildinfo/version"
+	_ "github.com/pubgo/redant"
 )
 
-//go:embed .version
-var version string
+//go:embed .version/VERSION
+var release string
+var _ = version.SetReleaseVersion(release)
 
 func main() {
-	bootstrap.Main(version)
+	bootstrap.Main()
 }

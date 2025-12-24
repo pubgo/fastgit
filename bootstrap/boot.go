@@ -1,44 +1,80 @@
 package bootstrap
 
 import (
-	"log/slog"
+	"context"
+	"fmt"
+	"os"
 
 	_ "github.com/adrg/xdg"
 	_ "github.com/charmbracelet/bubbletea"
-	"github.com/pubgo/dix"
-	"github.com/pubgo/funk/config"
-	"github.com/pubgo/funk/log"
-	"github.com/pubgo/funk/recovery"
-	_ "github.com/sashabaranov/go-openai"
-
+	"github.com/charmbracelet/x/term"
+	"github.com/pubgo/dix/v2"
+	"github.com/pubgo/dix/v2/dixcontext"
 	"github.com/pubgo/fastcommit/cmds/configcmd"
-	"github.com/pubgo/fastcommit/cmds/envcmd"
-	"github.com/pubgo/fastcommit/cmds/fastcommit"
+	"github.com/pubgo/fastcommit/cmds/fastcommitcmd"
 	"github.com/pubgo/fastcommit/cmds/historycmd"
+	"github.com/pubgo/fastcommit/cmds/pullcmd"
 	"github.com/pubgo/fastcommit/cmds/tagcmd"
 	"github.com/pubgo/fastcommit/cmds/upgradecmd"
 	"github.com/pubgo/fastcommit/cmds/versioncmd"
-	"github.com/pubgo/fastcommit/configs"
 	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/funk/v2/assert"
+	"github.com/pubgo/funk/v2/config"
+	"github.com/pubgo/funk/v2/errors"
+	"github.com/pubgo/funk/v2/log"
+	"github.com/pubgo/funk/v2/recovery"
+	"github.com/pubgo/redant"
+	_ "github.com/sashabaranov/go-openai"
 )
 
-func Main(ver string) {
-	defer recovery.Exit()
+func Main() {
+	run(
+		versioncmd.New(),
+		upgradecmd.New(),
+		tagcmd.New(),
+		historycmd.New(),
+		fastcommitcmd.New(),
+		configcmd.New(),
+		pullcmd.New(),
+	)
+}
 
-	slog.SetDefault(slog.New(log.NewSlog(log.GetLogger("fastcommit"))))
+func run(cmds ...*redant.Command) {
+	defer recovery.Exit(func(err error) error {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
 
-	initConfig()
+		if err.Error() == "signal: interrupt" {
+			return nil
+		}
 
-	var di = dix.New(dix.WithValuesNull())
-	di.Provide(versioncmd.New)
-	di.Provide(upgradecmd.New)
-	di.Provide(configs.New)
-	di.Provide(tagcmd.New)
-	di.Provide(config.Load[ConfigProvider])
-	di.Provide(utils.NewOpenaiClient)
-	di.Provide(envcmd.New)
-	di.Provide(historycmd.New)
-	di.Provide(fastcommit.New(ver))
-	di.Provide(configcmd.New)
-	di.Inject(func(cmd *fastcommit.Command) { cmd.Run() })
+		log.Err(err).Msg("failed to run command")
+		return nil
+	})
+
+	app := &redant.Command{
+		Use:      "fastcommit",
+		Short:    "Intelligent generation of git commit message",
+		Children: cmds,
+		Middleware: func(next redant.HandlerFunc) redant.HandlerFunc {
+			return func(ctx context.Context, i *redant.Invocation) error {
+				if utils.IsHelp() {
+					return redant.DefaultHelpFn()(ctx, i)
+				}
+
+				if !term.IsTerminal(os.Stdin.Fd()) {
+					return fmt.Errorf("stdin is not terminal")
+				}
+
+				initConfig()
+				di := dix.New(dix.WithValuesNull())
+				di.Provide(config.Load[configProvider])
+				di.Provide(utils.NewOpenaiClient)
+				return next(dixcontext.Create(ctx, di), i)
+			}
+		},
+	}
+
+	assert.Must(app.Run(utils.Context()))
 }
