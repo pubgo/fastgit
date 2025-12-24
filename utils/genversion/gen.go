@@ -8,8 +8,8 @@ import (
 
 	"github.com/dave/jennifer/jen"
 	"github.com/pubgo/fastcommit/utils"
-	"github.com/pubgo/funk/assert"
-	"github.com/pubgo/funk/pathutil"
+	"github.com/pubgo/funk/v2/assert"
+	"github.com/pubgo/funk/v2/pathutil"
 )
 
 func Gen(path string, version string) {
