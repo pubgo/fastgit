@@ -4,24 +4,25 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pubgo/fastcommit/utils"
-	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/running"
-	"github.com/pubgo/funk/version"
-	"github.com/urfave/cli/v3"
+	"github.com/pubgo/funk/v2/buildinfo/version"
+	"github.com/pubgo/funk/v2/recovery"
+	"github.com/pubgo/funk/v2/running"
+	"github.com/pubgo/redant"
 )
 
-func New() *cli.Command {
-	return &cli.Command{
-		Name:  "version",
-		Usage: utils.UsageDesc("%s version info", version.Project()),
-		Action: func(ctx context.Context, command *cli.Command) error {
+func New() *redant.Command {
+	return &redant.Command{
+		Use:     "version",
+		Aliases: []string{"v"},
+		Short:   "version info",
+		Handler: func(ctx context.Context, i *redant.Invocation) error {
 			defer recovery.Exit()
 			fmt.Println("project:", version.Project())
 			fmt.Println("version:", version.Version())
+			fmt.Println("release:", version.ReleaseVersion())
 			fmt.Println("commit-id:", version.CommitID())
 			fmt.Println("build-time:", version.BuildTime())
-			fmt.Println("instance-id:", running.InstanceID)
+			fmt.Println("device-id:", running.DeviceID)
 			return nil
 		},
 	}

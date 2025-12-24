@@ -4,11 +4,25 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/pubgo/funk/v2/log"
 	"github.com/yarlson/tap"
 )
 
 func main() {
+	spin := tap.NewSpinner(tap.SpinnerOptions{Indicator: "timer"})
+	spin.Start("Connecting")
+	go func() {
+		for {
+			time.Sleep(time.Second * 2)
+			log.Info().Msgf("ok")
+		}
+	}()
+	time.Sleep(time.Minute)
+	spin.Stop("Connected", 0)
+	fmt.Println()
+	return
 	fmt.Println("Styled Select Example")
 	fmt.Println("Use arrow keys (or hjkl) to navigate, Enter to select, Ctrl+C to cancel")
 	fmt.Println()

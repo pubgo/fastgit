@@ -9,4 +9,3 @@ agentic git commit generate tool
 - OPENAI_API_KEY
 - OPENAI_BASE_URL, default: https://api.deepseek.com/v1
 - OPENAI_MODEL, default: deepseek-chat
-
