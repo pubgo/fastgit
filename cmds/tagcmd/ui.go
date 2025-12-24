@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	semver "github.com/hashicorp/go-version"
-	"github.com/pubgo/funk/log"
+	"github.com/pubgo/funk/v2/log"
 )
 
 const (
