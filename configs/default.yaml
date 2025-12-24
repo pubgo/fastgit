@@ -1,6 +1,11 @@
 version:
-  name: "v0.0.1"
+  name: "v0.0.3"
 openai:
   api_key: ${OPENAI_API_KEY}
   base_url: ${OPENAI_BASE_URL}
   model: ${OPENAI_MODEL}
+commit:
+  gen_version: ${FASTCOMMIT_GEN_VERSION}
+
+patch_envs:
+  - env.yaml

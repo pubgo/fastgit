@@ -13,10 +13,10 @@ builds:
       - "linux_amd64"
       - "linux_arm64"
     ldflags:
-      - -X 'github.com/pubgo/funk/version.version=v{{ .Version }}'
-      - -X 'github.com/pubgo/funk/version.project=fastcommit'
-      - -X 'github.com/pubgo/funk/version.buildTime={{ .CommitDate }}'
-      - -X 'github.com/pubgo/funk/version.commitID={{ .ShortCommit }}'
+      - -X 'github.com/pubgo/funk/v2/buildinfo.version=v{{ .Version }}'
+      - -X 'github.com/pubgo/funk/v2/buildinfo.project=fastcommit'
+      - -X 'github.com/pubgo/funk/v2/buildinfo.buildTime={{ .CommitDate }}'
+      - -X 'github.com/pubgo/funk/v2/buildinfo.commitID={{ .ShortCommit }}'
     flags:
       - -trimpath
       - -tags=releaser
