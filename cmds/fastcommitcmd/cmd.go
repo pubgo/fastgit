@@ -37,6 +37,7 @@ func New() *redant.Command {
 	var flags = new(struct {
 		showPrompt bool
 		fastCommit bool
+		amend      bool
 	})
 
 	app := &redant.Command{
@@ -52,6 +53,11 @@ func New() *redant.Command {
 				Flag:        "fast",
 				Description: "Quickly generate messages without prompts.",
 				Value:       redant.BoolOf(&flags.fastCommit),
+			},
+			{
+				Flag:        "amend",
+				Description: "Amend the last commit.",
+				Value:       redant.BoolOf(&flags.amend),
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
@@ -140,10 +146,15 @@ func New() *redant.Command {
 
 				assert.Must(utils.ShellExec(ctx, "git", "add", "-A"))
 				res := utils.ShellExecOutput(ctx, "git", "status").Unwrap()
-				if strings.Contains(preMsg, prefixMsg) && !strings.Contains(res, `(use "git commit" to conclude merge)`) {
-					assert.Must(utils.ShellExec(ctx, "git", "commit", "--amend", "--no-edit", "-m", strconv.Quote(msg)))
-				} else {
+
+				if !flags.amend {
 					assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
+				} else {
+					if strings.Contains(preMsg, prefixMsg) && !strings.Contains(res, `(use "git commit" to conclude merge)`) {
+						assert.Must(utils.ShellExec(ctx, "git", "commit", "--amend", "--no-edit", "-m", strconv.Quote(msg)))
+					} else {
+						assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
+					}
 				}
 
 				res = utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
