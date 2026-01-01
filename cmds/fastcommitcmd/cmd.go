@@ -106,26 +106,6 @@ func New() *redant.Command {
 				return
 			}
 
-			//for _, cfg := range params.CommitCfg {
-			//	if !cfg.GenVersion {
-			//		continue
-			//	}
-			//
-			//	const verDir = ".version"
-			//	var verFile = filepath.Join(verDir, "VERSION")
-			//	_ = pathutil.IsNotExistMkDir(verDir)
-			//	allTags := utils.GetAllGitTags(ctx)
-			//	curTagName := "v0.0.1.alpha.1"
-			//	if len(allTags) > 0 {
-			//		currentVer := utils.GetCurMaxVer(ctx)
-			//		if currentVer != nil {
-			//			curTagName = "v" + currentVer.String()
-			//		}
-			//	}
-			//	assert.Exit(os.WriteFile(verFile, []byte(curTagName), 0644))
-			//	break
-			//}
-
 			//username := strings.TrimSpace(assert.Must1(utils.ShellExecOutput("git", "config", "get", "user.name")))
 
 			if flags.fastCommit {
@@ -173,18 +153,38 @@ func New() *redant.Command {
 				return
 			}
 
-			assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
+			// 非快速提交模式：遍历git log，将非prefixMsg开头的提交合并为一次提交
+			prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
+			commitsToSquash := getCommitsToSquash(ctx, prefixMsg)
+			
+			// 如果有需要合并的提交，先重置到第一个提交之前
+			if len(commitsToSquash) > 0 {
+				// 获取第一个提交的父提交
+				parentCommit := getParentCommit(ctx, commitsToSquash[0])
+				if parentCommit != "" {
+					// 重置到第一个提交的父提交
+					utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit)
+				} else {
+					// 如果没有父提交（即第一个提交），重置到初始状态
+					utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash)))
+				}
+			} else {
+				// 没有需要合并的提交，添加所有变更
+				assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
+			}
 
-			diff := utils.GetStagedDiff(ctx).Unwrap()
-			if diff == nil || len(diff.Files) == 0 {
+			// 获取当前所有变动的文件（重置后的工作区状态）
+			diffResult := utils.GetStagedDiff(ctx).Unwrap()
+			if diffResult == nil || len(diffResult.Files) == 0 {
 				return nil
 			}
 
-			log.Info().Msg(utils.GetDetectedMessage(diff.Files))
-			for _, file := range diff.Files {
+			log.Info().Msg(utils.GetDetectedMessage(diffResult.Files))
+			for _, file := range diffResult.Files {
 				log.Info().Msg("file: " + file)
 			}
 
+			// 使用spinner生成提交信息
 			s := spinner.New(spinner.CharSets[35], 100*time.Millisecond, func(s *spinner.Spinner) {
 				s.Prefix = "generate git message: "
 			})
@@ -201,7 +201,7 @@ func New() *redant.Command {
 						},
 						{
 							Role:    openai.ChatMessageRoleUser,
-							Content: diff.Diff,
+							Content: diffResult.Diff,
 						},
 					},
 				},
@@ -229,6 +229,7 @@ func New() *redant.Command {
 				return
 			}
 
+			// 创建新的提交
 			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
 			utils.GitPush(ctx, "origin", utils.GetBranchName())
 			if flags.showPrompt {
@@ -240,6 +241,54 @@ func New() *redant.Command {
 	}
 
 	return app
+}
+
+// getCommitsToSquash 遍历git log，找到以prefixMsg开头的提交（这些是需要合并的提交）
+func getCommitsToSquash(ctx context.Context, prefixMsg string) []string {
+	// 获取最近的提交列表，直到遇到不是prefixMsg开头的提交
+	cmd := exec.CommandContext(ctx, "git", "log", "--oneline", "--pretty=format:%H %s", "-10") // 限制最近10个提交
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var commitsToSquash []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		commitHash := parts[0]
+		commitMsg := parts[1]
+
+		// 如果提交消息以prefixMsg开头，添加到待合并列表
+		if strings.HasPrefix(commitMsg, prefixMsg) {
+			commitsToSquash = append(commitsToSquash, commitHash)
+		} else {
+			// 如果遇到不是prefixMsg开头的提交，停止遍历
+			break
+		}
+	}
+
+	return commitsToSquash
+}
+
+// getParentCommit 获取指定提交的父提交
+func getParentCommit(ctx context.Context, commitHash string) string {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", commitHash+"^")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func shouldPullDueToRemoteUpdate(msg string) bool {

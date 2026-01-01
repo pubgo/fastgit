@@ -178,7 +178,12 @@ func New() *redant.Command {
 					continue
 				}
 
-				_ = pathutil.IsNotExistMkDir(filepath.Dir(verFile))
+				dir := filepath.Dir(verFile)
+				if !pathutil.IsDir(dir) {
+					_ = pathutil.DeleteFile(dir)
+					_ = pathutil.MkDir(dir)
+				}
+
 				assert.Exit(os.WriteFile(verFile, []byte("v"+ver.Core().String()+"\n"), 0644))
 				break
 			}
