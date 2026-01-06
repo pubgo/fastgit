@@ -230,9 +230,9 @@ func New() *redant.Command {
 			// 创建新的提交
 			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
 			utils.GitPush(ctx, "origin", utils.GetBranchName())
-			//if flags.showPrompt {
-			fmt.Println("\n" + generatePrompt + "\n")
-			//}
+			if flags.showPrompt {
+				fmt.Println("\n" + generatePrompt + "\n")
+			}
 			log.Info().Any("usage", resp.Usage).Msg("openai response usage")
 			return
 		},
