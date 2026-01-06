@@ -16,7 +16,6 @@ import (
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
-	"github.com/pubgo/funk/v2/pretty"
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/redant"
 	"github.com/sashabaranov/go-openai"
@@ -259,8 +258,6 @@ func getFirstNonPrefixCommit(ctx context.Context, prefixMsg string) string {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	fmt.Println(lines)
-
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -272,11 +269,8 @@ func getFirstNonPrefixCommit(ctx context.Context, prefixMsg string) string {
 			continue
 		}
 
-		pretty.Println(parts)
-
 		commitHash := parts[0]
 		commitMsg := parts[1]
-		pretty.Println(commitMsg, prefixMsg)
 
 		// 如果提交消息不以prefixMsg开头，返回这个提交的hash
 		if !strings.HasPrefix(commitMsg, prefixMsg) {
@@ -292,9 +286,13 @@ func getFirstNonPrefixCommit(ctx context.Context, prefixMsg string) string {
 func getCommitsToSquash(ctx context.Context, prefixMsg string) []string {
 	// 获取当前分支最近的提交列表，直到遇到不是prefixMsg开头的提交
 	branchName := utils.GetBranchName()
-	output := utils.ShellExecOutput(ctx,
-		"git", "log", branchName, "--oneline", "--pretty=%H %s", "-10").Unwrap()
-	lines := strings.Split(strings.TrimSpace(output), "\n")
+	cmd := exec.CommandContext(ctx, "git", "log", branchName, "--oneline", "--pretty=format:%H %s", "-10") // 限制最近10个提交
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var commitsToSquash []string
 
 	for _, line := range lines {
