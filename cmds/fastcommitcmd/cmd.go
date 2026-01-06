@@ -156,7 +156,7 @@ func New() *redant.Command {
 			// 非快速提交模式：遍历git log，将非prefixMsg开头的提交合并为一次提交
 			prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
 			commitsToSquash := getCommitsToSquash(ctx, prefixMsg)
-			
+
 			// 如果有需要合并的提交，先重置到第一个提交之前
 			if len(commitsToSquash) > 0 {
 				// 获取第一个提交的父提交
@@ -232,9 +232,9 @@ func New() *redant.Command {
 			// 创建新的提交
 			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
 			utils.GitPush(ctx, "origin", utils.GetBranchName())
-			if flags.showPrompt {
-				fmt.Println("\n" + generatePrompt + "\n")
-			}
+			//if flags.showPrompt {
+			fmt.Println("\n" + generatePrompt + "\n")
+			//}
 			log.Info().Any("usage", resp.Usage).Msg("openai response usage")
 			return
 		},
@@ -245,8 +245,9 @@ func New() *redant.Command {
 
 // getCommitsToSquash 遍历git log，找到以prefixMsg开头的提交（这些是需要合并的提交）
 func getCommitsToSquash(ctx context.Context, prefixMsg string) []string {
-	// 获取最近的提交列表，直到遇到不是prefixMsg开头的提交
-	cmd := exec.CommandContext(ctx, "git", "log", "--oneline", "--pretty=format:%H %s", "-10") // 限制最近10个提交
+	// 获取当前分支最近的提交列表，直到遇到不是prefixMsg开头的提交
+	branchName := utils.GetBranchName()
+	cmd := exec.CommandContext(ctx, "git", "log", branchName, "--oneline", "--pretty=format:%H%s", "-10") // 限制最近10个提交
 	output, err := cmd.Output()
 	if err != nil {
 		return nil
