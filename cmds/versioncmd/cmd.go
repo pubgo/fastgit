@@ -10,6 +10,7 @@ import (
 	"github.com/pubgo/redant"
 )
 
+// sss
 func New() *redant.Command {
 	return &redant.Command{
 		Use:     "version",
