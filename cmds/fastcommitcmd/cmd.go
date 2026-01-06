@@ -163,15 +163,13 @@ func New() *redant.Command {
 				parentCommit := getParentCommit(ctx, commitsToSquash[0])
 				if parentCommit != "" {
 					// 重置到第一个提交的父提交
-					utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit)
+					assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit))
 				} else {
 					// 如果没有父提交（即第一个提交），重置到初始状态
-					utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash)))
+					assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash))))
 				}
-			} else {
-				// 没有需要合并的提交，添加所有变更
-				assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 			}
+			assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 
 			// 获取当前所有变动的文件（重置后的工作区状态）
 			diffResult := utils.GetStagedDiff(ctx).Unwrap()
