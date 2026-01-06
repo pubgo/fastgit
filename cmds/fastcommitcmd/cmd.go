@@ -172,10 +172,11 @@ func New() *redant.Command {
 						// 如果没有父提交（即第一个提交），重置到初始状态
 						assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash))))
 					}
-				} else {
-					// 没有需要合并的提交，添加所有变更
-					assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 				}
+			}
+
+			if utils.IsDirty().Unwrap() {
+				assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 			}
 
 			// 获取当前所有变动的文件（重置后的工作区状态）
@@ -235,7 +236,7 @@ func New() *redant.Command {
 
 			// 创建新的提交
 			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
-			utils.GitPush(ctx, "origin", utils.GetBranchName())
+			utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
 			if flags.showPrompt {
 				fmt.Println("\n" + generatePrompt + "\n")
 			}
