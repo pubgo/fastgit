@@ -16,6 +16,7 @@ import (
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
+	"github.com/pubgo/funk/v2/pretty"
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/redant"
 	"github.com/sashabaranov/go-openai"
@@ -101,14 +102,14 @@ func New() *redant.Command {
 				}
 			}
 
-			isDirty := utils.IsDirty().Unwrap()
-			if !isDirty {
-				return
-			}
-
 			//username := strings.TrimSpace(assert.Must1(utils.ShellExecOutput("git", "config", "get", "user.name")))
 
 			if flags.fastCommit {
+				isDirty := utils.IsDirty().Unwrap()
+				if !isDirty {
+					return
+				}
+
 				preMsg := strings.TrimSpace(utils.ShellExecOutput(ctx, "git", "log", "-1", "--pretty=%B").Unwrap())
 				prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
 				msg := fmt.Sprintf("%s at %s", prefixMsg, time.Now().Format(time.DateTime))
@@ -155,21 +156,28 @@ func New() *redant.Command {
 
 			// 非快速提交模式：遍历git log，将非prefixMsg开头的提交合并为一次提交
 			prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
-			commitsToSquash := getCommitsToSquash(ctx, prefixMsg)
+			targetCommit := getFirstNonPrefixCommit(ctx, prefixMsg)
 
-			// 如果有需要合并的提交，先重置到第一个提交之前
-			if len(commitsToSquash) > 0 {
-				// 获取第一个提交的父提交
-				parentCommit := getParentCommit(ctx, commitsToSquash[0])
-				if parentCommit != "" {
-					// 重置到第一个提交的父提交
-					assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit))
+			// 如果找到了第一个没有prefixMsg的提交，则重置到该提交
+			if targetCommit != "" {
+				assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", targetCommit))
+			} else {
+				// 如果没有找到非prefixMsg的提交，说明所有提交都是prefixMsg开头的，或者没有提交
+				// 这种情况下，我们重置到初始状态
+				commitsToSquash := getCommitsToSquash(ctx, prefixMsg)
+				if len(commitsToSquash) > 0 {
+					parentCommit := getParentCommit(ctx, commitsToSquash[0])
+					if parentCommit != "" {
+						assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit))
+					} else {
+						// 如果没有父提交（即第一个提交），重置到初始状态
+						assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash))))
+					}
 				} else {
-					// 如果没有父提交（即第一个提交），重置到初始状态
-					assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash))))
+					// 没有需要合并的提交，添加所有变更
+					assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 				}
 			}
-			assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
 
 			// 获取当前所有变动的文件（重置后的工作区状态）
 			diffResult := utils.GetStagedDiff(ctx).Unwrap()
@@ -182,7 +190,6 @@ func New() *redant.Command {
 				log.Info().Msg("file: " + file)
 			}
 
-			// 使用spinner生成提交信息
 			s := spinner.New(spinner.CharSets[35], 100*time.Millisecond, func(s *spinner.Spinner) {
 				s.Prefix = "generate git message: "
 			})
@@ -241,17 +248,53 @@ func New() *redant.Command {
 	return app
 }
 
+// getFirstNonPrefixCommit 获取第一个没有prefixMsg的提交ID
+func getFirstNonPrefixCommit(ctx context.Context, prefixMsg string) string {
+	// 获取当前分支最近的提交列表，找到第一个不是prefixMsg开头的提交
+	branchName := utils.GetBranchName()
+	cmd := exec.CommandContext(ctx, "git", "log", branchName, "--oneline", "--pretty=format:%H %s", "-20") // 增加到20个提交以确保找到
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	fmt.Println(lines)
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 2 {
+			continue
+		}
+
+		pretty.Println(parts)
+
+		commitHash := parts[0]
+		commitMsg := parts[1]
+		pretty.Println(commitMsg, prefixMsg)
+
+		// 如果提交消息不以prefixMsg开头，返回这个提交的hash
+		if !strings.HasPrefix(commitMsg, prefixMsg) {
+			return commitHash
+		}
+	}
+
+	// 如果所有提交都以prefixMsg开头，返回空字符串
+	return ""
+}
+
 // getCommitsToSquash 遍历git log，找到以prefixMsg开头的提交（这些是需要合并的提交）
 func getCommitsToSquash(ctx context.Context, prefixMsg string) []string {
 	// 获取当前分支最近的提交列表，直到遇到不是prefixMsg开头的提交
 	branchName := utils.GetBranchName()
-	cmd := exec.CommandContext(ctx, "git", "log", branchName, "--oneline", "--pretty=format:%H%s", "-10") // 限制最近10个提交
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	output := utils.ShellExecOutput(ctx,
+		"git", "log", branchName, "--oneline", "--pretty=%H %s", "-10").Unwrap()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 	var commitsToSquash []string
 
 	for _, line := range lines {
