@@ -51,7 +51,7 @@ func New() *redant.Command {
 
 			utils.GitBranchSetUpstream(ctx, utils.GetBranchName()).Must()
 
-			err := utils.GitPull(ctx).GetErr()
+			err := utils.GitPull(ctx, "origin", utils.GetBranchName()).GetErr()
 			if err != nil {
 				if isMergeConflict() {
 					handleMergeConflict()
