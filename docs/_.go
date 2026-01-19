@@ -12,3 +12,9 @@ package docs
 - repo 管理, 本地远程第三方仓库管理
 - 标签，分支管理
 - 项目分析*/
+
+// https://github.com/x-motemen/ghq
+// Remote repository management made easy
+
+// https://github.com/d-kuro/gwq?tab=readme-ov-file
+// gwq是一个用于高效管理 Git 工作树的 CLI 工具。就像如何管理仓库克隆一样，提供直观作，用于创建、切换和删除工作树，使用模糊的查找界面。ghqgwq
