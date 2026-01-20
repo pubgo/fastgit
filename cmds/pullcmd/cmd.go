@@ -20,9 +20,19 @@ type cmdParams struct {
 }
 
 func New() *redant.Command {
+	var flagData = new(struct {
+		pullAll bool
+	})
 	app := &redant.Command{
 		Use:   "pull",
 		Short: "git pull from remote origin",
+		Options: []redant.Option{
+			{
+				Flag:        "all",
+				Description: "pull all branches",
+				Value:       redant.BoolOf(&flagData.pullAll),
+			},
+		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
 			defer result.RecoveryErr(&gErr, func(err error) error {
 				if errors.Is(err, context.Canceled) {
@@ -49,14 +59,18 @@ func New() *redant.Command {
 				return
 			}
 
-			utils.GitBranchSetUpstream(ctx, utils.GetBranchName()).Must()
+			if flagData.pullAll {
+				utils.GitPull(ctx, "--all").Must()
+			} else {
+				utils.GitBranchSetUpstream(ctx, utils.GetBranchName()).Must()
 
-			err := utils.GitPull(ctx, "origin", utils.GetBranchName()).GetErr()
-			if err != nil {
-				if isMergeConflict() {
-					handleMergeConflict()
-				} else {
-					os.Exit(1)
+				err := utils.GitPull(ctx, "origin", utils.GetBranchName()).GetErr()
+				if err != nil {
+					if isMergeConflict() {
+						handleMergeConflict()
+					} else {
+						os.Exit(1)
+					}
 				}
 			}
 			return
