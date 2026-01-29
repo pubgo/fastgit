@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="devConsole()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>开发工具控制台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6 shadow-lg">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold mb-3 text-cyan-400">开发工具控制台（多服务）</h1>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <label class="text-sm text-gray-400">选择服务:</label>
+                            <select 
+                                x-model="currentService"
+                                @change="selectService()"
+                                class="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            >
+                                <template x-for="service in services" :key="service.name">
+                                    <option :value="service.name" x-text="service.name + ' (' + service.status + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-400">状态:</span>
+                            <span 
+                                :class="{
+                                    'bg-green-600': status === 'running',
+                                    'bg-red-600': status === 'stopped',
+                                    'bg-orange-600': status === 'build_failed' || status === 'start_failed'
+                                }"
+                                class="px-2 py-1 rounded text-xs font-medium"
+                                x-text="status"
+                            ></span>
+                        </div>
+                        <span class="text-sm text-gray-500" x-text="lastRestart ? '最后重启: ' + formatTime(lastRestart) : ''"></span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button 
+                        @click="showServiceModal = true; editingService = null"
+                        class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition"
+                    >
+                        新建服务
+                    </button>
+                    <button 
+                        @click="saveConfigToFile()"
+                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium transition"
+                    >
+                        保存到文件
+                    </button>
+                    <button 
+                        @click="restart()"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition"
+                    >
+                        重启
+                    </button>
+                    <button 
+                        @click="stop()"
+                        class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition"
+                    >
+                        停止
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Config Panel -->
+            <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                <h2 class="text-xl font-semibold mb-4 text-cyan-400">配置</h2>
+                <form @submit.prevent="saveConfig()" class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">服务运行端口（可选）</label>
+                        <input 
+                            type="number" 
+                            x-model="config.port"
+                            placeholder="0 表示不使用端口"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">监控目录（每行一个）</label>
+                        <textarea 
+                            x-model="config.watch_dirs_text"
+                            rows="3"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">监控扩展名（每行一个，如 .go）</label>
+                        <textarea 
+                            x-model="config.watch_exts_text"
+                            rows="2"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">忽略目录（每行一个）</label>
+                        <textarea 
+                            x-model="config.ignore_dirs_text"
+                            rows="2"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">构建命令</label>
+                        <input 
+                            type="text" 
+                            x-model="config.build_cmd"
+                            placeholder="go build -o tmp/main ."
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">运行命令</label>
+                        <input 
+                            type="text" 
+                            x-model="config.run_cmd"
+                            placeholder="./tmp/main"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">运行参数（空格分隔）</label>
+                        <input 
+                            type="text" 
+                            x-model="config.run_args_text"
+                            placeholder=""
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">重启延迟（毫秒）</label>
+                        <input 
+                            type="number" 
+                            x-model="config.delay"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">日志最大行数</label>
+                        <input 
+                            type="number" 
+                            x-model="config.log_max_lines"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div class="flex gap-2">
+                        <button 
+                            type="submit"
+                            class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition"
+                        >
+                            保存配置
+                        </button>
+                        <button 
+                            type="button"
+                            @click="openServiceModal(currentService)"
+                            class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded text-sm font-medium transition"
+                        >
+                            编辑服务
+                        </button>
+                        <button 
+                            type="button"
+                            @click="deleteService()"
+                            class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition"
+                        >
+                            删除服务
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Logs Panel -->
+            <div class="bg-gray-800 rounded-lg p-6 shadow-lg">
+                <h2 class="text-xl font-semibold mb-4 text-cyan-400">日志</h2>
+                <div 
+                    class="bg-gray-900 border border-gray-700 rounded p-4 h-[600px] overflow-y-auto font-mono text-xs"
+                    x-ref="logsContainer"
+                >
+                    <template x-for="log in logs" :key="log.time">
+                        <div class="mb-2 pb-2 border-b border-gray-800">
+                            <div class="flex items-start gap-2">
+                                <span class="text-gray-500 text-xs" x-text="formatTime(log.time)"></span>
+                                <span 
+                                    :class="{
+                                        'bg-blue-600': log.level === 'info',
+                                        'bg-red-600': log.level === 'error',
+                                        'bg-green-600': log.level === 'output'
+                                    }"
+                                    class="px-2 py-0.5 rounded text-xs font-medium"
+                                    x-text="log.level"
+                                ></span>
+                                <span class="text-gray-300 flex-1 break-words" x-html="escapeHtml(log.message)"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function devConsole() {
+            return {
+                services: [],
+                currentService: '',
+                status: 'stopped',
+                lastRestart: null,
+                config: {
+                    port: 0,
+                    watch_dirs_text: '',
+                    watch_exts_text: '',
+                    ignore_dirs_text: '',
+                    build_cmd: '',
+                    run_cmd: '',
+                    run_args_text: '',
+                    delay: 500,
+                    log_max_lines: 1000
+                },
+                logs: [],
+                showServiceModal: false,
+                editingService: null,
+                newService: {
+                    name: '',
+                    port: 0,
+                    watch_dirs_text: '.',
+                    watch_exts_text: '.go',
+                    ignore_dirs_text: '.git\nvendor\nnode_modules\ntmp',
+                    build_cmd: 'go build -o tmp/main .',
+                    run_cmd: './tmp/main',
+                    run_args_text: '',
+                    delay: 500,
+                    log_max_lines: 1000,
+                    enabled: true
+                },
+
+                init() {
+                    this.loadServices();
+                    setInterval(() => this.loadServices(), 5000);
+                    setInterval(() => {
+                        if (this.currentService) {
+                            this.loadStatus();
+                            this.loadLogs();
+                        }
+                    }, 1000);
+                },
+
+                async loadServices() {
+                    try {
+                        const res = await fetch('/api/services');
+                        this.services = await res.json();
+                        if (this.services.length > 0 && !this.currentService) {
+                            this.currentService = this.services[0].name;
+                            this.selectService();
+                        }
+                    } catch (e) {
+                        console.error('加载服务列表失败:', e);
+                    }
+                },
+
+                async selectService() {
+                    if (!this.currentService) return;
+                    await Promise.all([
+                        this.loadConfig(),
+                        this.loadStatus(),
+                        this.loadLogs()
+                    ]);
+                },
+
+                async loadConfig() {
+                    if (!this.currentService) return;
+                    try {
+                        const res = await fetch(`/api/config?service=${encodeURIComponent(this.currentService)}`);
+                        const config = await res.json();
+                        this.config = {
+                            port: config.port || 0,
+                            watch_dirs_text: (config.watch_dirs || []).join('\n'),
+                            watch_exts_text: (config.watch_exts || []).join('\n'),
+                            ignore_dirs_text: (config.ignore_dirs || []).join('\n'),
+                            build_cmd: config.build_cmd || '',
+                            run_cmd: config.run_cmd || '',
+                            run_args_text: (config.run_args || []).join(' '),
+                            delay: config.delay || 500,
+                            log_max_lines: config.log_max_lines || 1000
+                        };
+                    } catch (e) {
+                        console.error('加载配置失败:', e);
+                    }
+                },
+
+                async loadStatus() {
+                    if (!this.currentService) return;
+                    try {
+                        const res = await fetch(`/api/status?service=${encodeURIComponent(this.currentService)}`);
+                        const data = await res.json();
+                        this.status = data.status;
+                        this.lastRestart = data.last_restart;
+                    } catch (e) {
+                        console.error('加载状态失败:', e);
+                    }
+                },
+
+                async loadLogs() {
+                    if (!this.currentService) return;
+                    try {
+                        const res = await fetch(`/api/logs?service=${encodeURIComponent(this.currentService)}`);
+                        this.logs = await res.json();
+                        this.$nextTick(() => {
+                            const container = this.$refs.logsContainer;
+                            if (container) {
+                                container.scrollTop = container.scrollHeight;
+                            }
+                        });
+                    } catch (e) {
+                        console.error('加载日志失败:', e);
+                    }
+                },
+
+                async saveConfig() {
+                    if (!this.currentService) return;
+                    try {
+                        const formData = {
+                            name: this.currentService,
+                            port: parseInt(this.config.port) || 0,
+                            watch_dirs: this.config.watch_dirs_text.split('\n').filter(s => s.trim()),
+                            watch_exts: this.config.watch_exts_text.split('\n').filter(s => s.trim()),
+                            ignore_dirs: this.config.ignore_dirs_text.split('\n').filter(s => s.trim()),
+                            build_cmd: this.config.build_cmd,
+                            run_cmd: this.config.run_cmd,
+                            run_args: this.config.run_args_text.split(' ').filter(s => s.trim()),
+                            delay: parseInt(this.config.delay) || 500,
+                            log_max_lines: parseInt(this.config.log_max_lines) || 1000,
+                            enabled: true
+                        };
+
+                        const res = await fetch(`/api/config?service=${encodeURIComponent(this.currentService)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(formData)
+                        });
+
+                        if (res.ok) {
+                            alert('配置已保存');
+                            await this.loadConfig();
+                        }
+                    } catch (e) {
+                        console.error('保存配置失败:', e);
+                        alert('保存配置失败');
+                    }
+                },
+
+                async restart() {
+                    if (!this.currentService) return;
+                    try {
+                        await fetch(`/api/restart?service=${encodeURIComponent(this.currentService)}`, {
+                            method: 'POST'
+                        });
+                        setTimeout(() => this.loadStatus(), 500);
+                    } catch (e) {
+                        console.error('重启失败:', e);
+                    }
+                },
+
+                async stop() {
+                    if (!this.currentService) return;
+                    try {
+                        await fetch(`/api/stop?service=${encodeURIComponent(this.currentService)}`, {
+                            method: 'POST'
+                        });
+                        setTimeout(() => this.loadStatus(), 500);
+                    } catch (e) {
+                        console.error('停止失败:', e);
+                    }
+                },
+
+                formatTime(timeStr) {
+                    if (!timeStr) return '';
+                    const date = new Date(timeStr);
+                    return date.toLocaleTimeString('zh-CN');
+                },
+
+                escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                },
+
+                async saveConfigToFile() {
+                    try {
+                        const res = await fetch('/api/config/save', {
+                            method: 'POST'
+                        });
+                        if (res.ok) {
+                            alert('配置已保存到文件');
+                        } else {
+                            alert('保存失败');
+                        }
+                    } catch (e) {
+                        console.error('保存配置到文件失败:', e);
+                        alert('保存失败');
+                    }
+                },
+
+                openServiceModal(serviceName = null) {
+                    this.editingService = serviceName;
+                    if (serviceName) {
+                        // 编辑现有服务，加载配置
+                        this.loadConfig().then(() => {
+                            this.newService = {
+                                name: this.currentService,
+                                port: this.config.port,
+                                watch_dirs_text: this.config.watch_dirs_text,
+                                watch_exts_text: this.config.watch_exts_text,
+                                ignore_dirs_text: this.config.ignore_dirs_text,
+                                build_cmd: this.config.build_cmd,
+                                run_cmd: this.config.run_cmd,
+                                run_args_text: this.config.run_args_text,
+                                delay: this.config.delay,
+                                log_max_lines: this.config.log_max_lines,
+                                enabled: true
+                            };
+                        });
+                    } else {
+                        // 新建服务，重置表单
+                        this.newService = {
+                            name: '',
+                            port: 0,
+                            watch_dirs_text: '.',
+                            watch_exts_text: '.go',
+                            ignore_dirs_text: '.git\nvendor\nnode_modules\ntmp',
+                            build_cmd: 'go build -o tmp/main .',
+                            run_cmd: './tmp/main',
+                            run_args_text: '',
+                            delay: 500,
+                            log_max_lines: 1000,
+                            enabled: true
+                        };
+                    }
+                    this.showServiceModal = true;
+                },
+
+                async saveService() {
+                    if (!this.newService.name) {
+                        alert('服务名称不能为空');
+                        return;
+                    }
+
+                    try {
+                        const formData = {
+                            name: this.newService.name,
+                            port: parseInt(this.newService.port) || 0,
+                            watch_dirs: this.newService.watch_dirs_text.split('\n').filter(s => s.trim()),
+                            watch_exts: this.newService.watch_exts_text.split('\n').filter(s => s.trim()),
+                            ignore_dirs: this.newService.ignore_dirs_text.split('\n').filter(s => s.trim()),
+                            build_cmd: this.newService.build_cmd,
+                            run_cmd: this.newService.run_cmd,
+                            run_args: this.newService.run_args_text.split(' ').filter(s => s.trim()),
+                            delay: parseInt(this.newService.delay) || 500,
+                            log_max_lines: parseInt(this.newService.log_max_lines) || 1000,
+                            enabled: this.newService.enabled
+                        };
+
+                        const res = await fetch('/api/service', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(formData)
+                        });
+
+                        if (res.ok) {
+                            this.showServiceModal = false;
+                            await this.loadServices();
+                            this.currentService = this.newService.name;
+                            await this.selectService();
+                            alert('服务已保存');
+                        } else {
+                            const error = await res.text();
+                            alert('保存失败: ' + error);
+                        }
+                    } catch (e) {
+                        console.error('保存服务失败:', e);
+                        alert('保存失败');
+                    }
+                },
+
+                async deleteService() {
+                    if (!this.currentService) return;
+                    if (!confirm(`确定要删除服务 "${this.currentService}" 吗？`)) return;
+
+                    try {
+                        const res = await fetch(`/api/service?name=${encodeURIComponent(this.currentService)}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (res.ok) {
+                            await this.loadServices();
+                            if (this.services.length > 0) {
+                                this.currentService = this.services[0].name;
+                                await this.selectService();
+                            } else {
+                                this.currentService = '';
+                            }
+                            alert('服务已删除');
+                        } else {
+                            alert('删除失败');
+                        }
+                    } catch (e) {
+                        console.error('删除服务失败:', e);
+                        alert('删除失败');
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- 服务管理模态框 -->
+    <div 
+        x-show="showServiceModal"
+        x-cloak
+        @click.away="showServiceModal = false"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        style="display: none;"
+    >
+        <div class="bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+            <h2 class="text-xl font-bold mb-4 text-cyan-400" x-text="editingService ? '编辑服务' : '新建服务'"></h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">服务名称 *</label>
+                    <input 
+                        type="text" 
+                        x-model="newService.name"
+                        :disabled="editingService !== null"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                        placeholder="服务名称（唯一标识）"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">服务运行端口（可选）</label>
+                    <input 
+                        type="number" 
+                        x-model="newService.port"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder="0 表示不使用端口"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">监控目录（每行一个）</label>
+                    <textarea 
+                        x-model="newService.watch_dirs_text"
+                        rows="3"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    ></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">监控扩展名（每行一个）</label>
+                    <textarea 
+                        x-model="newService.watch_exts_text"
+                        rows="2"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    ></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">忽略目录（每行一个）</label>
+                    <textarea 
+                        x-model="newService.ignore_dirs_text"
+                        rows="2"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    ></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">构建命令</label>
+                    <input 
+                        type="text" 
+                        x-model="newService.build_cmd"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder="go build -o tmp/main ."
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">运行命令</label>
+                    <input 
+                        type="text" 
+                        x-model="newService.run_cmd"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder="./tmp/main"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">运行参数（空格分隔）</label>
+                    <input 
+                        type="text" 
+                        x-model="newService.run_args_text"
+                        class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder=""
+                    >
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">重启延迟（毫秒）</label>
+                        <input 
+                            type="number" 
+                            x-model="newService.delay"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-1">日志最大行数</label>
+                        <input 
+                            type="number" 
+                            x-model="newService.log_max_lines"
+                            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        x-model="newService.enabled"
+                        id="enabled"
+                        class="w-4 h-4"
+                    >
+                    <label for="enabled" class="text-sm text-gray-400">启用服务</label>
+                </div>
+            </div>
+            <div class="flex gap-2 mt-6">
+                <button 
+                    @click="saveService()"
+                    class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition"
+                >
+                    保存
+                </button>
+                <button 
+                    @click="showServiceModal = false"
+                    class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded text-sm font-medium transition"
+                >
+                    取消
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
