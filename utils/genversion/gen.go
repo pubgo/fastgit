@@ -36,7 +36,7 @@ func Gen(path string, version string) {
 	genFile.Const().Id("CommitID").Op("=").Lit("123")
 	genFile.Const().Id("BuildTime").Op("=").Lit(time.Now().UTC().Format(time.RFC3339))
 	genFile.Const().Id("Version").Op("=").Lit(strings.TrimSpace(version))
-	genFile.Const().Id("Branch").Op("=").Lit(strings.TrimSpace(utils.GetCurrentBranch().Must()))
+	genFile.Const().Id("Branch").Op("=").Lit(strings.TrimSpace(utils.GetCurrentBranch().Unwrap()))
 	genFile.Const().Id("Project").Op("=").Lit("ffff")
 
 	assert.Must(os.WriteFile(path, []byte(genFile.GoString()), 0644))

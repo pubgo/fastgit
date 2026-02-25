@@ -24,5 +24,5 @@ func TestMatch(t *testing.T) {
 	var txt = `123  Your branch and 'origin/feat/genai' have diverged 123`
 	t.Log(match.Match(txt, fmt.Sprintf("*Your branch and '*feat/genai' have diverged*")))
 
-	t.Log(strings.Contains(utils.ShellExecOutput(context.Background(), "git", "reflog", "-1").Must(), "(amend)"))
+	t.Log(strings.Contains(utils.ShellExecOutput(context.Background(), "git", "reflog", "-1").Unwrap(), "(amend)"))
 }
