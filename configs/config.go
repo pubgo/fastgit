@@ -22,7 +22,7 @@ var defaultConfig []byte
 var envConfig []byte
 
 var GetConfigPath = sync.OnceValue(func() string {
-	return assert.Exit1(xdg.ConfigFile("fastcommit/config.yaml"))
+	return assert.Exit1(xdg.ConfigFile("fastgit/config.yaml"))
 })
 
 var GetRepoPath = sync.OnceValue(func() string {
@@ -35,7 +35,7 @@ var GetEnvPath = sync.OnceValue(func() string {
 })
 
 var GetLocalEnvPath = sync.OnceValue(func() string {
-	return path.Join(GetRepoPath(), ".git", "fastcommit.env")
+	return path.Join(GetRepoPath(), ".git", "fastgit.env")
 })
 
 func GetDefaultConfig() []byte { return defaultConfig }

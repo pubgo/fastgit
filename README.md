@@ -1,4 +1,4 @@
-# fastcommit
+# fastgit
 agentic git commit generate tool
 
 ## Refer

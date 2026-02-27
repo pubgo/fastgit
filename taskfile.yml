@@ -4,7 +4,7 @@ version: '3'
 
 dotenv: [ '.env' ]
 vars:
-  Project: "fastcommit"
+  Project: "fastgit"
   Base: "github.com/pubgo/funk/buildinfo"
   VERSION:
     sh: "git tag --sort=committerdate | tail -n 1"

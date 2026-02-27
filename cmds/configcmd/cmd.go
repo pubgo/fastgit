@@ -7,8 +7,8 @@ import (
 
 	"github.com/a8m/envsubst"
 	"github.com/joho/godotenv"
-	"github.com/pubgo/fastcommit/configs"
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/configs"
+	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/config"
 	"github.com/pubgo/funk/v2/env"

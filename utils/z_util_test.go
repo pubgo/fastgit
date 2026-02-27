@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/tidwall/match"
 )

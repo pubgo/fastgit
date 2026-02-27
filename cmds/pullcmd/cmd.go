@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/result"

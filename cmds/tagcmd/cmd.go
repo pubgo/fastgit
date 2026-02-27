@@ -13,7 +13,7 @@ import (
 	semver "github.com/hashicorp/go-version"
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixcontext"
-	"github.com/pubgo/fastcommit/cmds/fastcommitcmd"
+	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/pathutil"
@@ -23,8 +23,8 @@ import (
 	"github.com/samber/lo"
 	"github.com/yarlson/tap"
 
-	"github.com/pubgo/fastcommit/utils"
-	"github.com/pubgo/fastcommit/utils/fzfutil"
+	"github.com/pubgo/fastgit/utils"
+	"github.com/pubgo/fastgit/utils/fzfutil"
 )
 
 type cmdParams struct {

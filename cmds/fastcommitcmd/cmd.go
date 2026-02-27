@@ -21,7 +21,7 @@ import (
 	"github.com/sashabaranov/go-openai"
 	"github.com/yarlson/tap"
 
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/utils"
 )
 
 type Config struct {

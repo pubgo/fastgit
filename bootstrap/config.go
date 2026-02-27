@@ -13,9 +13,9 @@ import (
 	"github.com/pubgo/funk/v2/running"
 	"gopkg.in/yaml.v3"
 
-	"github.com/pubgo/fastcommit/cmds/fastcommitcmd"
-	"github.com/pubgo/fastcommit/configs"
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
+	"github.com/pubgo/fastgit/configs"
+	"github.com/pubgo/fastgit/utils"
 )
 
 type configProvider struct {

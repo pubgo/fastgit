@@ -1,4 +1,4 @@
-module github.com/pubgo/fastcommit
+module github.com/pubgo/fastgit
 
 go 1.24.0
 
@@ -25,6 +25,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/docker/go-units v0.5.0
 	github.com/fatih/color v1.18.0
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-git/go-git/v6 v6.0.0-20250922101824-23ffe67a3eb3
 	github.com/google/go-github/v71 v71.0.0
 	github.com/hashicorp/go-getter v1.7.9
@@ -86,7 +87,6 @@ require (
 	github.com/ettle/strcase v0.2.0 // indirect
 	github.com/expr-lang/expr v1.17.7 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
 	github.com/gdamore/tcell/v2 v2.8.1 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect

@@ -10,16 +10,16 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixcontext"
-	"github.com/pubgo/fastcommit/cmds/chglogcmd"
-	"github.com/pubgo/fastcommit/cmds/configcmd"
-	"github.com/pubgo/fastcommit/cmds/devcmd"
-	"github.com/pubgo/fastcommit/cmds/fastcommitcmd"
-	"github.com/pubgo/fastcommit/cmds/historycmd"
-	"github.com/pubgo/fastcommit/cmds/pullcmd"
-	"github.com/pubgo/fastcommit/cmds/tagcmd"
-	"github.com/pubgo/fastcommit/cmds/upgradecmd"
-	"github.com/pubgo/fastcommit/cmds/versioncmd"
-	"github.com/pubgo/fastcommit/utils"
+	"github.com/pubgo/fastgit/cmds/chglogcmd"
+	"github.com/pubgo/fastgit/cmds/configcmd"
+	"github.com/pubgo/fastgit/cmds/devcmd"
+	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
+	"github.com/pubgo/fastgit/cmds/historycmd"
+	"github.com/pubgo/fastgit/cmds/pullcmd"
+	"github.com/pubgo/fastgit/cmds/tagcmd"
+	"github.com/pubgo/fastgit/cmds/upgradecmd"
+	"github.com/pubgo/fastgit/cmds/versioncmd"
+	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/config"
 	"github.com/pubgo/funk/v2/errors"
@@ -58,7 +58,7 @@ func run(cmds ...*redant.Command) {
 	})
 
 	app := &redant.Command{
-		Use:      "fastcommit",
+		Use:      "fastgit",
 		Short:    "Intelligent generation of git commit message",
 		Children: cmds,
 		Middleware: func(next redant.HandlerFunc) redant.HandlerFunc {

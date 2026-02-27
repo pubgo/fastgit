@@ -21,7 +21,7 @@ import (
 	"github.com/samber/lo"
 	"github.com/yarlson/tap"
 
-	"github.com/pubgo/fastcommit/utils/githubclient"
+	"github.com/pubgo/fastgit/utils/githubclient"
 )
 
 func New() *redant.Command {
@@ -32,7 +32,7 @@ func New() *redant.Command {
 			{
 				Use: "list",
 				Handler: func(ctx context.Context, i *redant.Invocation) error {
-					client := githubclient.NewPublicRelease("pubgo", "fastcommit")
+					client := githubclient.NewPublicRelease("pubgo", "fastgit")
 					releases := assert.Must1(client.List(ctx))
 
 					tt := tablewriter.NewWriter(os.Stdout)
@@ -72,7 +72,7 @@ func New() *redant.Command {
 				return err
 			})
 
-			client := githubclient.NewPublicRelease("pubgo", "fastcommit")
+			client := githubclient.NewPublicRelease("pubgo", "fastgit")
 			r := assert.Must1(client.List(ctx))
 
 			assets := githubclient.GetAssetList(r)
@@ -107,7 +107,7 @@ func New() *redant.Command {
 			assert.If(!ok, "%s not found", versionName)
 			var downloadURL = asset.URL
 
-			downloadDir := filepath.Join(os.TempDir(), "fastcommit")
+			downloadDir := filepath.Join(os.TempDir(), "fastgit")
 			pwd := assert.Must1(os.Getwd())
 
 			execFile := filepath.Base(os.Args[0])
@@ -129,7 +129,7 @@ func New() *redant.Command {
 				ProgressListener: defaultProgressBar,
 			}
 			assert.Must(c.Get())
-			assert.Must(os.Rename(downloadDir+"/fastcommit", execFile))
+			assert.Must(os.Rename(downloadDir+"/fastgit", execFile))
 
 			return nil
 		},

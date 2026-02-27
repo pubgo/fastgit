@@ -28,7 +28,7 @@ import (
 	_ "github.com/tidwall/match"
 	"mvdan.cc/sh/v3/shell"
 
-	"github.com/pubgo/fastcommit/configs"
+	"github.com/pubgo/fastgit/configs"
 )
 
 func GetAllRemoteTags(ctx context.Context) []*semver.Version {
