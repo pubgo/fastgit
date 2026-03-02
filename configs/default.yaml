@@ -5,7 +5,7 @@ openai:
   base_url: ${OPENAI_BASE_URL}
   model: ${OPENAI_MODEL}
 commit:
-  gen_version: ${FASTCOMMIT_GEN_VERSION}
+  gen_version: ${FASTGIT_GEN_VERSION}
 
 patch_envs:
   - env.yaml
