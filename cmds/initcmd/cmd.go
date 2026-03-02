@@ -45,7 +45,7 @@ func New() *redant.Command {
 				defer file.Close()
 				for name, cfg := range config.LoadEnvMap(cfgPath) {
 					envData := strutil.FirstNotEmpty(cfg.Value, cfg.Default, "")
-					fmt.Fprintln(file, fmt.Sprintf(`%s=%q`, name, envData))
+					fmt.Fprintf(file, "%s=%q\n", name, envData)
 				}
 				log.Info().Msgf("local env created: %s", localPath)
 			} else {
