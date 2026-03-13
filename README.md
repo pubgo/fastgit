@@ -7,6 +7,7 @@ agentic git commit generate tool
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
 - `fastgit ggc <command ...>`: 执行统一命令，例如 `fastgit ggc status short`
 - `fastgit ggc` / `fastgit ggc interactive`: 进入交互模式（增量搜索 + workflow）
+- `fastgit ggc path`: 查看当前 `ggc.yaml` 的实际路径（按 OS/XDG 规则）
 
 ## New ggc-style command surface (phase 1)
 
@@ -44,7 +45,9 @@ agentic git commit generate tool
 
 ## Phase 3: Workflow 持久化 + Alias
 
-- workflow 会持久化到：`~/.config/fastgit/ggc.yaml`
+- workflow 会持久化到：`<XDG 配置目录>/fastgit/ggc.yaml`
+	- macOS 常见为：`~/Library/Application Support/fastgit/ggc.yaml`
+	- Linux 常见为：`~/.config/fastgit/ggc.yaml`
 - 每次进入 `fastgit ggc` 交互模式会自动加载上次 workflow
 - 在交互模式里对 workflow 的新增/删除/清空会自动保存
 

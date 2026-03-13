@@ -38,6 +38,14 @@ func New() *redant.Command {
 					return runInteractiveFlow(ctx, registry, store)
 				},
 			},
+			{
+				Use:   "path",
+				Short: "Show ggc state file path",
+				Handler: func(ctx context.Context, i *redant.Invocation) error {
+					fmt.Println(store.Path())
+					return nil
+				},
+			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) error {
 			command := i.Command
@@ -56,7 +64,7 @@ func New() *redant.Command {
 			}
 
 			if err := executeWithAliases(ctx, registry, state, parts); err != nil {
-				return fmt.Errorf("%w\nTry: fastgit ggc list", err)
+				return fmt.Errorf("%w\nTry: fastgit ggc list\nIf this should be an alias, check: fastgit ggc path", err)
 			}
 
 			return nil
