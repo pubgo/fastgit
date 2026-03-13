@@ -377,6 +377,11 @@ func (r *Registry) List() []CommandEntry {
 	return out
 }
 
+func (r *Registry) Get(key string) (CommandEntry, bool) {
+	entry, ok := r.byKey[key]
+	return entry, ok
+}
+
 func runGitCommand(ctx context.Context, args ...string) error {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stdout = os.Stdout

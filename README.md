@@ -6,6 +6,7 @@ agentic git commit generate tool
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
 - `fastgit ggc <command ...>`: 执行统一命令，例如 `fastgit ggc status short`
+- `fastgit ggc` / `fastgit ggc interactive`: 进入交互模式（增量搜索 + workflow）
 
 ## New ggc-style command surface (phase 1)
 
@@ -21,6 +22,57 @@ agentic git commit generate tool
 - `fastgit ggc rebase <upstream>|continue|abort|skip`
 - `fastgit ggc tag list|show <tag>`
 - `fastgit ggc remote list`
+
+## Interactive Mode (phase 2 - MVP)
+
+- 搜索模式（默认）
+	- 输入字符：实时 fuzzy 过滤命令
+	- `↑/↓` 或 `Ctrl+N/P`：移动选中
+	- `Enter`：执行当前命令
+	- `Tab`：将当前命令加入当前 workflow
+	- `Ctrl+T`：切换到 workflow 模式
+	- `Ctrl+C`：退出
+- workflow 模式
+	- `n`：新建 workflow
+	- `d` / `Ctrl+D`：删除当前 workflow
+	- `c`：清空当前 workflow
+	- `Ctrl+N/P`：切换 workflow
+	- `x` 或 `Enter`：执行当前 workflow
+	- `Ctrl+T`：返回搜索模式
+
+> 对于带占位参数的命令（如 `<name>`），执行时会自动提示输入参数。
+
+## Phase 3: Workflow 持久化 + Alias
+
+- workflow 会持久化到：`~/.config/fastgit/ggc.yaml`
+- 每次进入 `fastgit ggc` 交互模式会自动加载上次 workflow
+- 在交互模式里对 workflow 的新增/删除/清空会自动保存
+
+### Alias 配置
+
+`ggc.yaml` 支持两种 alias：
+
+- 单条 alias（字符串）
+- 序列 alias（字符串数组，按顺序执行）
+
+示例：
+
+```yaml
+aliases:
+	st: "status short"
+	ci: "commit {0}"
+	quick:
+		- "status"
+		- "add ."
+		- "commit {0}"
+```
+
+说明：
+
+- `{0}`、`{1}`... 表示位置参数
+- 例如：`fastgit ggc ci "fix typo"`
+- 例如：`fastgit ggc quick "chore: update"`
+- `fastgit ggc list` 会同时显示内置命令与 alias
 
 ## Refer
 - https://github.com/Nutlope/aicommits

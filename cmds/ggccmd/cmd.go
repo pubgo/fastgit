@@ -10,6 +10,7 @@ import (
 
 func New() *redant.Command {
 	registry := NewRegistry()
+	store := NewStateStore()
 
 	return &redant.Command{
 		Use:   "ggc",
@@ -19,19 +20,29 @@ func New() *redant.Command {
 				Use:   "list",
 				Short: "List supported unified commands",
 				Handler: func(ctx context.Context, i *redant.Invocation) error {
-					for _, entry := range registry.List() {
+					state, err := store.Load()
+					if err != nil {
+						return err
+					}
+
+					for _, entry := range buildInteractiveEntries(registry, state) {
 						fmt.Printf("- %-28s %s\n", entry.Usage, entry.Description)
 					}
 					return nil
+				},
+			},
+			{
+				Use:   "interactive",
+				Short: "Run interactive fuzzy command picker",
+				Handler: func(ctx context.Context, i *redant.Invocation) error {
+					return runInteractiveFlow(ctx, registry, store)
 				},
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) error {
 			command := i.Command
 			if len(command.Args) == 0 {
-				fmt.Println("Usage: fastgit ggc <command...>")
-				fmt.Println("Tip: fastgit ggc list")
-				return nil
+				return runInteractiveFlow(ctx, registry, store)
 			}
 
 			parts := make([]string, 0, len(command.Args))
@@ -39,7 +50,12 @@ func New() *redant.Command {
 				parts = append(parts, strings.TrimSpace(arg.Value.String()))
 			}
 
-			if err := registry.Execute(ctx, parts); err != nil {
+			state, err := store.Load()
+			if err != nil {
+				return err
+			}
+
+			if err := executeWithAliases(ctx, registry, state, parts); err != nil {
 				return fmt.Errorf("%w\nTry: fastgit ggc list", err)
 			}
 
