@@ -12,6 +12,7 @@ import (
 	"github.com/pubgo/dix/v2/dixcontext"
 	"github.com/pubgo/fastgit/cmds/chglogcmd"
 	"github.com/pubgo/fastgit/cmds/configcmd"
+	"github.com/pubgo/fastgit/cmds/copilotcmd"
 	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
 	"github.com/pubgo/fastgit/cmds/historycmd"
 	"github.com/pubgo/fastgit/cmds/initcmd"
@@ -40,6 +41,7 @@ func Main() {
 		configcmd.New(),
 		pullcmd.New(),
 		chglogcmd.NewCommand(),
+		copilotcmd.New(),
 	)
 }
 

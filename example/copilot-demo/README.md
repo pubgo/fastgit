@@ -1,5 +1,8 @@
 # copilot-demo 示例
 
+> 当前示例已改为复用正式命令实现：`cmds/copilotcmd`。
+> 推荐优先使用 `fastgit copilot ...`，示例仅用于快速本地验证。
+
 用于演示如何在 `redant` 中通过 `github/copilot-sdk/go` 复用 Copilot CLI 能力，并与 `agentline` 交互模式打通。
 
 ## 功能覆盖
@@ -23,8 +26,10 @@
 ## 快速运行
 
 - 查看状态：
+  - `fastgit copilot status`
   - `go run example/copilot-demo/main.go status`
 - 新建会话并对话：
+  - `fastgit copilot chat --prompt "解释一下 redant 的命令分发"`
   - `go run example/copilot-demo/main.go chat --prompt "解释一下 redant 的命令分发"`
 - 使用 `chat` 继续指定会话（提供 `session-id` 时自动进入 resume 模式）：
   - `go run example/copilot-demo/main.go chat --session-id <SESSION_ID> --prompt "继续"`
@@ -92,3 +97,31 @@
 - `--reasoning-effort`：推理强度（`low/medium/high/xhigh`）
 - `--system-message`：追加系统提示词
 - `--stream`：启用流式输出
+
+## 高级配置（当前重点）
+
+`fastgit copilot` 现已支持会话级高级配置，覆盖你关心的点：
+
+- `ConfigDir`：`--config-dir`
+- 系统提示词：`--system-message-mode`、`--system-message`、`--system-sections-json`
+- Skills：`--skill-dirs`、`--disabled-skills`
+- 自定义 Tool：`--custom-tools-json`、`--enable-demo-echo-tool`
+- MCP：`--mcp-servers-json`
+- 自定义 Agent：`--custom-agents-json`、`--agent`
+
+示例：
+
+- 指定模型 + 配置目录 + 系统提示词
+  - `fastgit copilot chat --prompt "分析当前仓库" --model gpt-5 --config-dir ~/.config/fastgit/copilot --system-message-mode append --system-message "你是资深 Go 架构师"`
+
+- 启用 skills 目录并禁用某些技能
+  - `fastgit copilot chat --prompt "继续" --skill-dirs ./skills --skill-dirs ~/.copilot/skills --disabled-skills experimental-skill`
+
+- 配置 MCP（JSON）
+  - `fastgit copilot chat --prompt "读取项目上下文" --mcp-servers-json '{"fs":{"type":"local","command":"node","args":["mcp-fs.js"],"tools":["read_file"]}}'`
+
+- 配置自定义 agent（JSON）并激活
+  - `fastgit copilot chat --prompt "请帮我重构" --custom-agents-json '[{"name":"go-refactor","description":"专注 Go 重构","prompt":"你是 Go 重构专家"}]' --agent go-refactor`
+
+- 配置自定义 tools（JSON）
+  - `fastgit copilot chat --prompt "调用自定义工具" --custom-tools-json '[{"name":"ticket_lookup","description":"查询工单","resultText":"TICKET-123: in progress"}]'`
