@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -185,10 +186,39 @@ func (r *PTYRunner) Wait() error {
 	return err
 }
 
+func (r *PTYRunner) Interrupt() error {
+	if r == nil || r.cmd == nil || r.cmd.Process == nil {
+		return nil
+	}
+	return r.cmd.Process.Signal(syscall.SIGINT)
+}
+
+func forwardLineInput(r *PTYRunner, in io.Reader, stderr io.Writer) {
+	if r == nil || in == nil {
+		return
+	}
+	sc := bufio.NewScanner(in)
+	for sc.Scan() {
+		line := sc.Text()
+		switch strings.TrimSpace(line) {
+		case ":interrupt", ":ctrlc":
+			_ = r.Interrupt()
+			continue
+		}
+		if err := r.SendLine(line); err != nil {
+			if stderr != nil {
+				_, _ = fmt.Fprintf(stderr, "line input forward failed: %v\n", err)
+			}
+			return
+		}
+	}
+}
+
 func main() {
 	command := flag.String("cmd", "copilot", "要封装的命令（建议 interactive 命令）")
 	script := flag.String("script", "", "自动输入脚本，使用 \\n 分隔；默认空表示不自动发送")
-	pipeStdin := flag.Bool("stdin", true, "将当前终端输入透传给子进程（交互模式建议开启）")
+	pipeStdin := flag.Bool("stdin", false, "是否直接进入 raw 交互接管（true=立即进入交互）")
+	lineInput := flag.Bool("line-input", true, "非 raw 模式下，按行转发你的输入到子进程")
 	stepDelay := flag.Duration("step-delay", 300*time.Millisecond, "每条输入之间的间隔")
 	timeout := flag.Duration("timeout", 0, "整体超时；0 表示不设置超时")
 	expect := flag.String("expect", "", "发送脚本前等待输出包含该文本（可选）")
@@ -216,6 +246,10 @@ func main() {
 
 	if !interactiveMode {
 		runner.AttachCapture(os.Stdout)
+		if *lineInput {
+			go forwardLineInput(runner, os.Stdin, os.Stderr)
+			_, _ = fmt.Fprintln(os.Stderr, "line-input 已启用：直接输入文本会转发给子进程；输入 :interrupt 可发送 Ctrl+C。")
+		}
 	}
 
 	if !interactiveMode && strings.TrimSpace(*expect) != "" {
