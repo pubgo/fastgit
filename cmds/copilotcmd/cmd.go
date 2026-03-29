@@ -50,6 +50,10 @@ func New() *redant.Command {
 		prompt    string
 		sessionID string
 		pingMsg   string
+
+		hydrateSessions  bool
+		hydrateTimeout   string
+		hydrateMaxEvents int64
 	)
 
 	rootCmd := &redant.Command{
@@ -230,6 +234,11 @@ func New() *redant.Command {
 		Use:      "sessions",
 		Short:    "列出 Copilot 会话",
 		Metadata: agentlinemodule.AgentCommandMetadata(),
+		Options: redant.OptionSet{
+			{Flag: "hydrate", Description: "尝试恢复会话并补全最近 assistant 摘要", Value: redant.BoolOf(&hydrateSessions), Default: "false"},
+			{Flag: "hydrate-timeout", Description: "单会话补全超时", Value: redant.StringOf(&hydrateTimeout), Default: "4s"},
+			{Flag: "hydrate-max-events", Description: "补全时最多扫描的最近事件数", Value: redant.Int64Of(&hydrateMaxEvents), Default: "50"},
+		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			return withClient(ctx, inv, clientOptions{cliPath, logLevel, workingDir, githubToken, useLoggedInUser}, func(ctx context.Context, client *copilot.Client) error {
 				items, err := client.ListSessions(ctx, nil)
@@ -240,8 +249,34 @@ func New() *redant.Command {
 					_, _ = fmt.Fprintln(inv.Stdout, "暂无会话")
 					return nil
 				}
+
+				hydrateCfg := hydrateConfig{
+					enabled:   hydrateSessions,
+					timeout:   parseDurationOrDefault(hydrateTimeout, 4*time.Second),
+					maxEvents: int(hydrateMaxEvents),
+				}
+
+				onlyIDCount := 0
+				hydratedCount := 0
 				for _, s := range items {
-					_, _ = fmt.Fprintf(inv.Stdout, "- %s\n", strings.TrimSpace(s.SessionID))
+					info := hydrateSessionInfo{maxEvents: hydrateCfg.maxEvents}
+					if hydrateCfg.enabled {
+						hydratedCount++
+						info = hydrateSession(ctx, client, strings.TrimSpace(s.SessionID), hydrateCfg)
+					}
+
+					line, onlyID := renderSessionLine(s, info)
+					if onlyID {
+						onlyIDCount++
+					}
+					_, _ = fmt.Fprintln(inv.Stdout, line)
+				}
+
+				if onlyIDCount > 0 {
+					_, _ = fmt.Fprintf(inv.Stdout, "\n提示: %d/%d 条会话只返回 session id（上游 CLI 限制，不是解析错误）。\n", onlyIDCount, len(items))
+				}
+				if hydrateCfg.enabled {
+					_, _ = fmt.Fprintf(inv.Stdout, "提示: hydrate 已尝试补全 %d 条会话（timeout=%s, maxEvents=%d）。\n", hydratedCount, hydrateCfg.timeout.String(), hydrateCfg.maxEvents)
 				}
 				return nil
 			})
@@ -791,4 +826,151 @@ func withDefault(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+type hydrateConfig struct {
+	enabled   bool
+	timeout   time.Duration
+	maxEvents int
+}
+
+type hydrateSessionInfo struct {
+	messageCount  int
+	lastAssistant string
+	errorText     string
+	maxEvents     int
+}
+
+func renderSessionLine(s copilot.SessionMetadata, hydrate hydrateSessionInfo) (line string, onlyID bool) {
+	parts := []string{fmt.Sprintf("- id=%s", withDefault(strings.TrimSpace(s.SessionID), "(empty)"))}
+
+	if t := strings.TrimSpace(s.StartTime); t != "" {
+		parts = append(parts, "start="+t)
+	}
+	if t := strings.TrimSpace(s.ModifiedTime); t != "" {
+		parts = append(parts, "modified="+t)
+	}
+
+	if s.Summary != nil {
+		summary := strings.TrimSpace(*s.Summary)
+		if summary != "" {
+			parts = append(parts, "summary="+summary)
+		}
+	}
+
+	if s.Context != nil {
+		if repo := strings.TrimSpace(s.Context.Repository); repo != "" {
+			parts = append(parts, "repo="+repo)
+		}
+		if branch := strings.TrimSpace(s.Context.Branch); branch != "" {
+			parts = append(parts, "branch="+branch)
+		}
+		if cwd := strings.TrimSpace(s.Context.Cwd); cwd != "" {
+			parts = append(parts, "cwd="+cwd)
+		}
+	}
+
+	if hydrate.errorText != "" {
+		parts = append(parts, "hydrate.error="+hydrate.errorText)
+	}
+	if hydrate.messageCount > 0 {
+		parts = append(parts, fmt.Sprintf("hydrate.messages=%d", hydrate.messageCount))
+	}
+	if hydrate.lastAssistant != "" {
+		parts = append(parts, "hydrate.assistant="+hydrate.lastAssistant)
+	}
+	if hydrate.maxEvents > 0 {
+		parts = append(parts, fmt.Sprintf("hydrate.scan=%d", hydrate.maxEvents))
+	}
+
+	if len(parts) == 1 {
+		parts = append(parts, "meta=empty")
+		return strings.Join(parts, "  "), true
+	}
+
+	return strings.Join(parts, "  "), false
+}
+
+func hydrateSession(ctx context.Context, client *copilot.Client, sessionID string, cfg hydrateConfig) hydrateSessionInfo {
+	info := hydrateSessionInfo{maxEvents: cfg.maxEvents}
+	if !cfg.enabled || sessionID == "" {
+		return info
+	}
+
+	if cfg.maxEvents <= 0 {
+		cfg.maxEvents = 50
+		info.maxEvents = cfg.maxEvents
+	}
+
+	rctx, cancel := context.WithTimeout(ctx, cfg.timeout)
+	defer cancel()
+
+	session, err := client.ResumeSession(rctx, sessionID, &copilot.ResumeSessionConfig{
+		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		DisableResume:       true,
+	})
+	if err != nil {
+		info.errorText = compactText(err.Error(), 120)
+		return info
+	}
+	defer func() {
+		if err := session.Disconnect(); err != nil {
+			if strings.TrimSpace(info.errorText) == "" {
+				info.errorText = compactText(fmt.Sprintf("disconnect session: %v", err), 120)
+			} else {
+				info.errorText = compactText(info.errorText+"; disconnect session: "+err.Error(), 120)
+			}
+		}
+	}()
+
+	events, err := session.GetMessages(rctx)
+	if err != nil {
+		info.errorText = compactText(err.Error(), 120)
+		return info
+	}
+
+	info.messageCount = len(events)
+	start := 0
+	if len(events) > cfg.maxEvents {
+		start = len(events) - cfg.maxEvents
+	}
+
+	for i := len(events) - 1; i >= start; i-- {
+		e := events[i]
+		if e.Type == "assistant.message" && e.Data.Content != nil {
+			text := strings.TrimSpace(*e.Data.Content)
+			if text != "" {
+				info.lastAssistant = compactText(text, 120)
+				break
+			}
+		}
+	}
+
+	return info
+}
+
+func compactText(s string, max int) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\t", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max <= 1 {
+		return "…"
+	}
+	return s[:max-1] + "…"
+}
+
+func parseDurationOrDefault(raw string, fallback time.Duration) time.Duration {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }
