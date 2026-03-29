@@ -17,9 +17,9 @@ import (
 	"charm.land/lipgloss/v2"
 	acp "github.com/coder/acp-go-sdk"
 
+	agentacp "github.com/pubgo/fastgit/cmds/agentlineapp/acp"
+	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
 	"github.com/pubgo/redant"
-	agentacp "github.com/pubgo/redant/cmds/agentlineapp/acp"
-	agentlinemodule "github.com/pubgo/redant/pkg/agentline"
 )
 
 const (

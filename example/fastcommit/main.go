@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/pubgo/redant"
-	agentlineapp "github.com/pubgo/redant/cmds/agentlineapp"
+	agentlineapp "github.com/pubgo/fastgit/cmds/agentlineapp"
 	"github.com/pubgo/redant/cmds/completioncmd"
 	"github.com/pubgo/redant/cmds/mcpcmd"
 	"github.com/pubgo/redant/cmds/readlinecmd"
 	"github.com/pubgo/redant/cmds/richlinecmd"
 	"github.com/pubgo/redant/cmds/webcmd"
 	"github.com/pubgo/redant/cmds/webttycmd"
-	agentlinemodule "github.com/pubgo/redant/pkg/agentline"
+	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
 )
 
 // mkdir -p ~/.zsh/completions

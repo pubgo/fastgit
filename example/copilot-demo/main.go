@@ -16,11 +16,11 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 	copilot "github.com/github/copilot-sdk/go"
 
+	agentlineapp "github.com/pubgo/fastgit/cmds/agentlineapp"
+	agentacp "github.com/pubgo/fastgit/cmds/agentlineapp/acp"
+	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
 	"github.com/pubgo/redant"
-	agentlineapp "github.com/pubgo/redant/cmds/agentlineapp"
-	agentacp "github.com/pubgo/redant/cmds/agentlineapp/acp"
 	"github.com/pubgo/redant/cmds/webcmd"
-	agentlinemodule "github.com/pubgo/redant/pkg/agentline"
 )
 
 var demoRT = newDemoRuntime()

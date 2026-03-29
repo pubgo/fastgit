@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	acp "github.com/coder/acp-go-sdk"
 
+	agentacp "github.com/pubgo/fastgit/cmds/agentlineapp/acp"
 	"github.com/pubgo/redant"
-	agentacp "github.com/pubgo/redant/cmds/agentlineapp/acp"
 )
 
 type slashCommand struct {

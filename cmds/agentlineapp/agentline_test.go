@@ -8,8 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
 	"github.com/pubgo/redant"
-	agentlinemodule "github.com/pubgo/redant/pkg/agentline"
 )
 
 func TestCollectSlashCompletionItems(t *testing.T) {

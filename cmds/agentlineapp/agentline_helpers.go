@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/pubgo/redant/internal/gitshell"
+	"github.com/pubgo/fastgit/pkg/gitshell"
 )
 
 func runStatus(err error) string {
