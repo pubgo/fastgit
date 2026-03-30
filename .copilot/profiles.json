@@ -1,0 +1,20 @@
+{
+    "profiles": {
+        "dev": {
+            "model": "gpt-5",
+            "reasoningEffort": "medium",
+            "workingDirectory": ".",
+            "skillDirs": [],
+            "disabledSkills": [],
+            "availableTools": [],
+            "excludedTools": [],
+            "mcpServersJSON": "",
+            "customAgentsJSON": "",
+            "agent": "",
+            "customToolsJSON": "",
+            "streaming": false,
+            "enableDemoEchoTool": false,
+            "enableInfiniteSession": true
+        }
+    }
+}

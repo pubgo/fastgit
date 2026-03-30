@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +36,8 @@ func New() *redant.Command {
 
 		configDir             string
 		sessionWorkingDir     string
+		profileName           string
+		profileFile           string
 		systemMessageMode     string
 		systemMessage         string
 		systemSectionsJSON    string
@@ -72,6 +77,8 @@ func New() *redant.Command {
 			{Flag: "auto-user-answer", Description: "ask_user 触发时自动回答内容", Value: redant.StringOf(&autoUserAnswer), Default: "继续执行"},
 			{Flag: "config-dir", Description: "覆盖 Copilot Session 的配置目录", Value: redant.StringOf(&configDir)},
 			{Flag: "working-directory", Description: "会话工作目录（工具执行根目录）", Value: redant.StringOf(&sessionWorkingDir)},
+			{Flag: "profile", Description: "使用的配置 profile 名称（从 profile-file 读取）", Value: redant.StringOf(&profileName)},
+			{Flag: "profile-file", Description: "profile 配置文件路径（JSON）", Value: redant.StringOf(&profileFile), Default: ".copilot/profiles.json"},
 			{Flag: "system-message-mode", Description: "系统提示词模式(append|replace|customize)", Value: redant.StringOf(&systemMessageMode), Default: "append"},
 			{Flag: "system-message", Description: "系统提示词内容", Value: redant.StringOf(&systemMessage)},
 			{Flag: "system-sections-json", Description: "customize 模式 section 覆盖 JSON", Value: redant.StringOf(&systemSectionsJSON)},
@@ -97,7 +104,14 @@ func New() *redant.Command {
 			{Flag: "session-id", Description: "指定会话 ID（可选）", Value: redant.StringOf(&sessionID)},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			adv, err := buildAdvancedConfig(advancedConfigInput{
+			resolved, err := resolveCopilotOptions(resolveCopilotInput{
+				Model:                 model,
+				ReasoningEffort:       reasoningEffort,
+				Streaming:             streaming,
+				ConfigDir:             configDir,
+				SessionWorkingDir:     sessionWorkingDir,
+				ProfileName:           profileName,
+				ProfileFile:           profileFile,
 				SystemMessageMode:     systemMessageMode,
 				SystemMessage:         systemMessage,
 				SystemSectionsJSON:    systemSectionsJSON,
@@ -120,21 +134,21 @@ func New() *redant.Command {
 				sid := strings.TrimSpace(sessionID)
 				if sid == "" {
 					s, err := client.CreateSession(ctx, &copilot.SessionConfig{
-						Model:               strings.TrimSpace(model),
-						ReasoningEffort:     strings.TrimSpace(reasoningEffort),
-						ConfigDir:           strings.TrimSpace(configDir),
-						WorkingDirectory:    strings.TrimSpace(sessionWorkingDir),
-						Tools:               adv.Tools,
-						SystemMessage:       adv.SystemMessage,
-						AvailableTools:      adv.AvailableTools,
-						ExcludedTools:       adv.ExcludedTools,
-						MCPServers:          adv.MCPServers,
-						CustomAgents:        adv.CustomAgents,
-						Agent:               adv.Agent,
-						SkillDirectories:    adv.SkillDirectories,
-						DisabledSkills:      adv.DisabledSkills,
-						InfiniteSessions:    adv.InfiniteSessions,
-						Streaming:           streaming,
+						Model:               strings.TrimSpace(resolved.Model),
+						ReasoningEffort:     strings.TrimSpace(resolved.ReasoningEffort),
+						ConfigDir:           strings.TrimSpace(resolved.ConfigDir),
+						WorkingDirectory:    strings.TrimSpace(resolved.SessionWorkingDir),
+						Tools:               resolved.Advanced.Tools,
+						SystemMessage:       resolved.Advanced.SystemMessage,
+						AvailableTools:      resolved.Advanced.AvailableTools,
+						ExcludedTools:       resolved.Advanced.ExcludedTools,
+						MCPServers:          resolved.Advanced.MCPServers,
+						CustomAgents:        resolved.Advanced.CustomAgents,
+						Agent:               resolved.Advanced.Agent,
+						SkillDirectories:    resolved.Advanced.SkillDirectories,
+						DisabledSkills:      resolved.Advanced.DisabledSkills,
+						InfiniteSessions:    resolved.Advanced.InfiniteSessions,
+						Streaming:           resolved.Streaming,
 						OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
 						OnUserInputRequest:  buildUserInputHandler(inv, autoUserAnswer),
 					})
@@ -147,28 +161,28 @@ func New() *redant.Command {
 				}
 
 				s, err := ensureSession(ctx, client, sid, resumeOptions{
-					Model:              model,
-					ReasoningEffort:    reasoningEffort,
-					Streaming:          streaming,
-					ConfigDir:          configDir,
-					WorkingDirectory:   sessionWorkingDir,
+					Model:              resolved.Model,
+					ReasoningEffort:    resolved.ReasoningEffort,
+					Streaming:          resolved.Streaming,
+					ConfigDir:          resolved.ConfigDir,
+					WorkingDirectory:   resolved.SessionWorkingDir,
 					AutoUserAnswer:     autoUserAnswer,
-					SystemMessage:      adv.SystemMessage,
-					Tools:              adv.Tools,
-					AvailableTools:     adv.AvailableTools,
-					ExcludedTools:      adv.ExcludedTools,
-					MCPServers:         adv.MCPServers,
-					CustomAgents:       adv.CustomAgents,
-					Agent:              adv.Agent,
-					SkillDirectories:   adv.SkillDirectories,
-					DisabledSkills:     adv.DisabledSkills,
-					InfiniteSessions:   adv.InfiniteSessions,
+					SystemMessage:      resolved.Advanced.SystemMessage,
+					Tools:              resolved.Advanced.Tools,
+					AvailableTools:     resolved.Advanced.AvailableTools,
+					ExcludedTools:      resolved.Advanced.ExcludedTools,
+					MCPServers:         resolved.Advanced.MCPServers,
+					CustomAgents:       resolved.Advanced.CustomAgents,
+					Agent:              resolved.Advanced.Agent,
+					SkillDirectories:   resolved.Advanced.SkillDirectories,
+					DisabledSkills:     resolved.Advanced.DisabledSkills,
+					InfiniteSessions:   resolved.Advanced.InfiniteSessions,
 					PermissionApproval: true,
 				}, inv)
 				if err != nil {
 					return err
 				}
-				return sendPrompt(ctx, inv, s, strings.TrimSpace(prompt), streaming)
+				return sendPrompt(ctx, inv, s, strings.TrimSpace(prompt), resolved.Streaming)
 			})
 		},
 	}
@@ -182,7 +196,14 @@ func New() *redant.Command {
 			{Flag: "prompt", Shorthand: "p", Description: "继续发送的提示词", Value: redant.StringOf(&prompt), Default: "继续"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
-			adv, err := buildAdvancedConfig(advancedConfigInput{
+			resolved, err := resolveCopilotOptions(resolveCopilotInput{
+				Model:                 model,
+				ReasoningEffort:       reasoningEffort,
+				Streaming:             streaming,
+				ConfigDir:             configDir,
+				SessionWorkingDir:     sessionWorkingDir,
+				ProfileName:           profileName,
+				ProfileFile:           profileFile,
 				SystemMessageMode:     systemMessageMode,
 				SystemMessage:         systemMessage,
 				SystemSectionsJSON:    systemSectionsJSON,
@@ -204,28 +225,28 @@ func New() *redant.Command {
 			return withClient(ctx, inv, clientOptions{cliPath, logLevel, workingDir, githubToken, useLoggedInUser}, func(ctx context.Context, client *copilot.Client) error {
 				sid := strings.TrimSpace(sessionID)
 				s, err := ensureSession(ctx, client, sid, resumeOptions{
-					Model:              model,
-					ReasoningEffort:    reasoningEffort,
-					Streaming:          streaming,
-					ConfigDir:          configDir,
-					WorkingDirectory:   sessionWorkingDir,
+					Model:              resolved.Model,
+					ReasoningEffort:    resolved.ReasoningEffort,
+					Streaming:          resolved.Streaming,
+					ConfigDir:          resolved.ConfigDir,
+					WorkingDirectory:   resolved.SessionWorkingDir,
 					AutoUserAnswer:     autoUserAnswer,
-					SystemMessage:      adv.SystemMessage,
-					Tools:              adv.Tools,
-					AvailableTools:     adv.AvailableTools,
-					ExcludedTools:      adv.ExcludedTools,
-					MCPServers:         adv.MCPServers,
-					CustomAgents:       adv.CustomAgents,
-					Agent:              adv.Agent,
-					SkillDirectories:   adv.SkillDirectories,
-					DisabledSkills:     adv.DisabledSkills,
-					InfiniteSessions:   adv.InfiniteSessions,
+					SystemMessage:      resolved.Advanced.SystemMessage,
+					Tools:              resolved.Advanced.Tools,
+					AvailableTools:     resolved.Advanced.AvailableTools,
+					ExcludedTools:      resolved.Advanced.ExcludedTools,
+					MCPServers:         resolved.Advanced.MCPServers,
+					CustomAgents:       resolved.Advanced.CustomAgents,
+					Agent:              resolved.Advanced.Agent,
+					SkillDirectories:   resolved.Advanced.SkillDirectories,
+					DisabledSkills:     resolved.Advanced.DisabledSkills,
+					InfiniteSessions:   resolved.Advanced.InfiniteSessions,
 					PermissionApproval: true,
 				}, inv)
 				if err != nil {
 					return err
 				}
-				return sendPrompt(ctx, inv, s, strings.TrimSpace(prompt), streaming)
+				return sendPrompt(ctx, inv, s, strings.TrimSpace(prompt), resolved.Streaming)
 			})
 		},
 	}
@@ -325,6 +346,119 @@ func New() *redant.Command {
 		},
 	}
 
+	doctorCmd := &redant.Command{
+		Use:      "doctor",
+		Short:    "诊断 Copilot 会话配置与依赖",
+		Metadata: agentlinemodule.AgentCommandMetadata(),
+		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+			_ = ctx
+			resolved, err := resolveCopilotOptions(resolveCopilotInput{
+				Model:                 model,
+				ReasoningEffort:       reasoningEffort,
+				Streaming:             streaming,
+				ConfigDir:             configDir,
+				SessionWorkingDir:     sessionWorkingDir,
+				ProfileName:           profileName,
+				ProfileFile:           profileFile,
+				SystemMessageMode:     systemMessageMode,
+				SystemMessage:         systemMessage,
+				SystemSectionsJSON:    systemSectionsJSON,
+				SkillDirs:             skillDirs,
+				DisabledSkills:        disabledSkills,
+				AvailableTools:        availableTools,
+				ExcludedTools:         excludedTools,
+				MCPServersJSON:        mcpServersJSON,
+				CustomAgentsJSON:      customAgentsJSON,
+				AgentName:             agentName,
+				CustomToolsJSON:       customToolsJSON,
+				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableInfiniteSession: enableInfiniteSession,
+			})
+			if err != nil {
+				return err
+			}
+
+			report := runDoctorChecks(doctorInput{
+				GitHubToken:      githubToken,
+				UseLoggedInUser:  useLoggedInUser,
+				ProfileName:      resolved.ProfileName,
+				ProfileFile:      resolved.ProfileFile,
+				SkillDirs:        resolved.Advanced.SkillDirectories,
+				DisabledSkills:   resolved.Advanced.DisabledSkills,
+				AgentName:        strings.TrimSpace(resolved.Advanced.Agent),
+				CustomAgentsJSON: resolved.CustomAgentsJSON,
+				MCPServersJSON:   resolved.MCPServersJSON,
+			})
+
+			for _, line := range report.lines() {
+				_, _ = fmt.Fprintln(inv.Stdout, line)
+			}
+
+			if report.hasError() {
+				return fmt.Errorf("doctor failed: %d error(s), %d warning(s)", report.errorCount(), report.warnCount())
+			}
+			return nil
+		},
+	}
+
+	inspectCmd := &redant.Command{
+		Use:      "inspect",
+		Short:    "查看当前会话将生效的配置摘要",
+		Metadata: agentlinemodule.AgentCommandMetadata(),
+		Handler: func(ctx context.Context, inv *redant.Invocation) error {
+			_ = ctx
+			resolved, err := resolveCopilotOptions(resolveCopilotInput{
+				Model:                 model,
+				ReasoningEffort:       reasoningEffort,
+				Streaming:             streaming,
+				ConfigDir:             configDir,
+				SessionWorkingDir:     sessionWorkingDir,
+				ProfileName:           profileName,
+				ProfileFile:           profileFile,
+				SystemMessageMode:     systemMessageMode,
+				SystemMessage:         systemMessage,
+				SystemSectionsJSON:    systemSectionsJSON,
+				SkillDirs:             skillDirs,
+				DisabledSkills:        disabledSkills,
+				AvailableTools:        availableTools,
+				ExcludedTools:         excludedTools,
+				MCPServersJSON:        mcpServersJSON,
+				CustomAgentsJSON:      customAgentsJSON,
+				AgentName:             agentName,
+				CustomToolsJSON:       customToolsJSON,
+				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableInfiniteSession: enableInfiniteSession,
+			})
+			if err != nil {
+				return err
+			}
+
+			summary := buildInspectSummary(inspectInput{
+				Model:                resolved.Model,
+				ReasoningEffort:      resolved.ReasoningEffort,
+				Streaming:            resolved.Streaming,
+				ConfigDir:            resolved.ConfigDir,
+				SessionWorkingDir:    resolved.SessionWorkingDir,
+				UseLoggedInUser:      useLoggedInUser,
+				HasGitHubToken:       strings.TrimSpace(githubToken) != "",
+				EnableDemoEchoTool:   resolved.EnableDemoEchoTool,
+				EnableInfiniteSesion: resolved.EnableInfiniteSession,
+				ProfileName:          resolved.ProfileName,
+				ProfileFile:          resolved.ProfileFile,
+				Advanced:             resolved.Advanced,
+				CustomAgentsJSON:     resolved.CustomAgentsJSON,
+				MCPServersJSON:       resolved.MCPServersJSON,
+			})
+
+			payload, err := json.MarshalIndent(summary, "", "  ")
+			if err != nil {
+				return fmt.Errorf("marshal inspect summary: %w", err)
+			}
+			_, _ = fmt.Fprintln(inv.Stdout, string(payload))
+			return nil
+		},
+	}
+
 	interactiveDemoCmd := &redant.Command{
 		Use:      "interactive-demo",
 		Short:    "演示命令与 agentline 的双向问答",
@@ -349,7 +483,7 @@ func New() *redant.Command {
 		},
 	}
 
-	rootCmd.Children = []*redant.Command{chatCmd, resumeCmd, sessionsCmd, statusCmd, modelsCmd, interactiveDemoCmd}
+	rootCmd.Children = []*redant.Command{chatCmd, resumeCmd, sessionsCmd, statusCmd, modelsCmd, doctorCmd, inspectCmd, interactiveDemoCmd}
 	rootCmd.Handler = func(ctx context.Context, inv *redant.Invocation) error {
 		defer rt.Close(inv.Stderr)
 		return agentlineapp.Run(ctx, rootCmd, &agentlineapp.RuntimeOptions{Prompt: "copilot> ", Stdin: inv.Stdin, Stdout: inv.Stdout})
@@ -384,6 +518,204 @@ type advancedConfig struct {
 	Agent            string
 	Tools            []copilot.Tool
 	InfiniteSessions *copilot.InfiniteSessionConfig
+}
+
+type copilotProfile struct {
+	Model                 string   `json:"model"`
+	ReasoningEffort       string   `json:"reasoningEffort"`
+	Streaming             *bool    `json:"streaming"`
+	ConfigDir             string   `json:"configDir"`
+	SessionWorkingDir     string   `json:"workingDirectory"`
+	SystemMessageMode     string   `json:"systemMessageMode"`
+	SystemMessage         string   `json:"systemMessage"`
+	SystemSectionsJSON    string   `json:"systemSectionsJSON"`
+	SkillDirs             []string `json:"skillDirs"`
+	DisabledSkills        []string `json:"disabledSkills"`
+	AvailableTools        []string `json:"availableTools"`
+	ExcludedTools         []string `json:"excludedTools"`
+	MCPServersJSON        string   `json:"mcpServersJSON"`
+	CustomAgentsJSON      string   `json:"customAgentsJSON"`
+	AgentName             string   `json:"agent"`
+	CustomToolsJSON       string   `json:"customToolsJSON"`
+	EnableDemoEchoTool    *bool    `json:"enableDemoEchoTool"`
+	EnableInfiniteSession *bool    `json:"enableInfiniteSession"`
+}
+
+type copilotProfileFile struct {
+	Profiles map[string]copilotProfile `json:"profiles"`
+}
+
+type resolveCopilotInput struct {
+	Model                 string
+	ReasoningEffort       string
+	Streaming             bool
+	ConfigDir             string
+	SessionWorkingDir     string
+	ProfileName           string
+	ProfileFile           string
+	SystemMessageMode     string
+	SystemMessage         string
+	SystemSectionsJSON    string
+	SkillDirs             []string
+	DisabledSkills        []string
+	AvailableTools        []string
+	ExcludedTools         []string
+	MCPServersJSON        string
+	CustomAgentsJSON      string
+	AgentName             string
+	CustomToolsJSON       string
+	EnableDemoEchoTool    bool
+	EnableInfiniteSession bool
+}
+
+type resolvedCopilotOptions struct {
+	Model                 string
+	ReasoningEffort       string
+	Streaming             bool
+	ConfigDir             string
+	SessionWorkingDir     string
+	ProfileName           string
+	ProfileFile           string
+	CustomAgentsJSON      string
+	MCPServersJSON        string
+	EnableDemoEchoTool    bool
+	EnableInfiniteSession bool
+	Advanced              *advancedConfig
+}
+
+func resolveCopilotOptions(in resolveCopilotInput) (*resolvedCopilotOptions, error) {
+	pf, err := loadCopilotProfile(strings.TrimSpace(in.ProfileFile), strings.TrimSpace(in.ProfileName))
+	if err != nil {
+		return nil, err
+	}
+
+	if pf != nil {
+		if strings.TrimSpace(in.Model) == "" || strings.TrimSpace(in.Model) == "gpt-5" {
+			if strings.TrimSpace(pf.Model) != "" {
+				in.Model = strings.TrimSpace(pf.Model)
+			}
+		}
+		if strings.TrimSpace(in.ReasoningEffort) == "" && strings.TrimSpace(pf.ReasoningEffort) != "" {
+			in.ReasoningEffort = strings.TrimSpace(pf.ReasoningEffort)
+		}
+		if strings.TrimSpace(in.ConfigDir) == "" && strings.TrimSpace(pf.ConfigDir) != "" {
+			in.ConfigDir = strings.TrimSpace(pf.ConfigDir)
+		}
+		if strings.TrimSpace(in.SessionWorkingDir) == "" && strings.TrimSpace(pf.SessionWorkingDir) != "" {
+			in.SessionWorkingDir = strings.TrimSpace(pf.SessionWorkingDir)
+		}
+		if (strings.TrimSpace(in.SystemMessageMode) == "" || strings.EqualFold(strings.TrimSpace(in.SystemMessageMode), "append")) && strings.TrimSpace(pf.SystemMessageMode) != "" {
+			in.SystemMessageMode = strings.TrimSpace(pf.SystemMessageMode)
+		}
+		if strings.TrimSpace(in.SystemMessage) == "" && strings.TrimSpace(pf.SystemMessage) != "" {
+			in.SystemMessage = strings.TrimSpace(pf.SystemMessage)
+		}
+		if strings.TrimSpace(in.SystemSectionsJSON) == "" && strings.TrimSpace(pf.SystemSectionsJSON) != "" {
+			in.SystemSectionsJSON = strings.TrimSpace(pf.SystemSectionsJSON)
+		}
+		if len(in.SkillDirs) == 0 && len(pf.SkillDirs) > 0 {
+			in.SkillDirs = append([]string(nil), pf.SkillDirs...)
+		}
+		if len(in.DisabledSkills) == 0 && len(pf.DisabledSkills) > 0 {
+			in.DisabledSkills = append([]string(nil), pf.DisabledSkills...)
+		}
+		if len(in.AvailableTools) == 0 && len(pf.AvailableTools) > 0 {
+			in.AvailableTools = append([]string(nil), pf.AvailableTools...)
+		}
+		if len(in.ExcludedTools) == 0 && len(pf.ExcludedTools) > 0 {
+			in.ExcludedTools = append([]string(nil), pf.ExcludedTools...)
+		}
+		if strings.TrimSpace(in.MCPServersJSON) == "" && strings.TrimSpace(pf.MCPServersJSON) != "" {
+			in.MCPServersJSON = strings.TrimSpace(pf.MCPServersJSON)
+		}
+		if strings.TrimSpace(in.CustomAgentsJSON) == "" && strings.TrimSpace(pf.CustomAgentsJSON) != "" {
+			in.CustomAgentsJSON = strings.TrimSpace(pf.CustomAgentsJSON)
+		}
+		if strings.TrimSpace(in.AgentName) == "" && strings.TrimSpace(pf.AgentName) != "" {
+			in.AgentName = strings.TrimSpace(pf.AgentName)
+		}
+		if strings.TrimSpace(in.CustomToolsJSON) == "" && strings.TrimSpace(pf.CustomToolsJSON) != "" {
+			in.CustomToolsJSON = strings.TrimSpace(pf.CustomToolsJSON)
+		}
+		if !in.Streaming && pf.Streaming != nil {
+			in.Streaming = *pf.Streaming
+		}
+		if !in.EnableDemoEchoTool && pf.EnableDemoEchoTool != nil {
+			in.EnableDemoEchoTool = *pf.EnableDemoEchoTool
+		}
+		if in.EnableInfiniteSession && pf.EnableInfiniteSession != nil {
+			in.EnableInfiniteSession = *pf.EnableInfiniteSession
+		}
+	}
+
+	adv, err := buildAdvancedConfig(advancedConfigInput{
+		SystemMessageMode:     in.SystemMessageMode,
+		SystemMessage:         in.SystemMessage,
+		SystemSectionsJSON:    in.SystemSectionsJSON,
+		SkillDirs:             in.SkillDirs,
+		DisabledSkills:        in.DisabledSkills,
+		AvailableTools:        in.AvailableTools,
+		ExcludedTools:         in.ExcludedTools,
+		MCPServersJSON:        in.MCPServersJSON,
+		CustomAgentsJSON:      in.CustomAgentsJSON,
+		AgentName:             in.AgentName,
+		CustomToolsJSON:       in.CustomToolsJSON,
+		EnableDemoEchoTool:    in.EnableDemoEchoTool,
+		EnableInfiniteSession: in.EnableInfiniteSession,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &resolvedCopilotOptions{
+		Model:                 strings.TrimSpace(in.Model),
+		ReasoningEffort:       strings.TrimSpace(in.ReasoningEffort),
+		Streaming:             in.Streaming,
+		ConfigDir:             strings.TrimSpace(in.ConfigDir),
+		SessionWorkingDir:     strings.TrimSpace(in.SessionWorkingDir),
+		ProfileName:           strings.TrimSpace(in.ProfileName),
+		ProfileFile:           strings.TrimSpace(in.ProfileFile),
+		CustomAgentsJSON:      strings.TrimSpace(in.CustomAgentsJSON),
+		MCPServersJSON:        strings.TrimSpace(in.MCPServersJSON),
+		EnableDemoEchoTool:    in.EnableDemoEchoTool,
+		EnableInfiniteSession: in.EnableInfiniteSession,
+		Advanced:              adv,
+	}, nil
+}
+
+func loadCopilotProfile(profileFile, profileName string) (*copilotProfile, error) {
+	profileName = strings.TrimSpace(profileName)
+	if profileName == "" {
+		return nil, nil
+	}
+	profileFile = strings.TrimSpace(profileFile)
+	if profileFile == "" {
+		return nil, fmt.Errorf("--profile-file 不能为空")
+	}
+
+	content, err := os.ReadFile(profileFile)
+	if err != nil {
+		return nil, fmt.Errorf("read profile file(%s): %w", profileFile, err)
+	}
+
+	var cfg copilotProfileFile
+	if err := json.Unmarshal(content, &cfg); err != nil {
+		return nil, fmt.Errorf("invalid profile file json(%s): %w", profileFile, err)
+	}
+	if len(cfg.Profiles) == 0 {
+		return nil, fmt.Errorf("profile file(%s) 中未找到 profiles", profileFile)
+	}
+
+	p, ok := cfg.Profiles[profileName]
+	if !ok {
+		names := make([]string, 0, len(cfg.Profiles))
+		for name := range cfg.Profiles {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		return nil, fmt.Errorf("profile %q 不存在，available=%s", profileName, strings.Join(names, ","))
+	}
+	return &p, nil
 }
 
 func buildAdvancedConfig(in advancedConfigInput) (*advancedConfig, error) {
@@ -973,4 +1305,298 @@ func parseDurationOrDefault(raw string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+type doctorInput struct {
+	GitHubToken      string
+	UseLoggedInUser  bool
+	ProfileName      string
+	ProfileFile      string
+	SkillDirs        []string
+	DisabledSkills   []string
+	AgentName        string
+	CustomAgentsJSON string
+	MCPServersJSON   string
+}
+
+type doctorFinding struct {
+	Level string
+	Text  string
+}
+
+type doctorReport struct {
+	findings []doctorFinding
+}
+
+func runDoctorChecks(in doctorInput) doctorReport {
+	report := doctorReport{}
+
+	if strings.TrimSpace(in.ProfileName) != "" {
+		report.add("ok", fmt.Sprintf("使用 profile=%s (file=%s)", strings.TrimSpace(in.ProfileName), withDefault(strings.TrimSpace(in.ProfileFile), "(empty)")))
+	}
+
+	if strings.TrimSpace(in.GitHubToken) == "" && !in.UseLoggedInUser {
+		report.add("error", "未提供 --copilot-token/GITHUB_TOKEN，且 --copilot-use-logged-in-user=false，无法认证")
+	} else if strings.TrimSpace(in.GitHubToken) == "" && in.UseLoggedInUser {
+		report.add("warn", "未提供 token，将依赖已登录用户身份")
+	} else {
+		report.add("ok", "认证配置可用（检测到 token 或已登录用户模式）")
+	}
+
+	if len(in.SkillDirs) == 0 {
+		report.add("warn", "未配置 --skill-dirs，skills 不会从外部目录加载")
+	} else {
+		for _, dir := range in.SkillDirs {
+			if err := checkSkillDir(dir); err != nil {
+				report.add("error", err.Error())
+				continue
+			}
+			report.add("ok", "skills 目录可用: "+dir)
+		}
+	}
+
+	if len(in.DisabledSkills) > 0 {
+		report.add("ok", fmt.Sprintf("禁用技能数: %d", len(in.DisabledSkills)))
+	}
+
+	agentNames := extractCustomAgentNamesFromJSON(in.CustomAgentsJSON)
+	agentNameSet := make(map[string]struct{}, len(agentNames))
+	for _, item := range agentNames {
+		agentNameSet[item] = struct{}{}
+	}
+	if in.AgentName != "" {
+		if len(agentNameSet) == 0 {
+			report.add("warn", "指定了 --agent，但未通过 --custom-agents-json 提供可选 agent 列表")
+		} else if _, ok := agentNameSet[in.AgentName]; !ok {
+			report.add("error", fmt.Sprintf("--agent=%q 不在 custom-agents 列表中", in.AgentName))
+		} else {
+			report.add("ok", "激活 agent 匹配成功: "+in.AgentName)
+		}
+	} else if len(agentNameSet) > 0 {
+		report.add("warn", "已配置 custom-agents，但未指定 --agent 激活项")
+	}
+
+	mcpCommands := extractMCPServerCommands(in.MCPServersJSON)
+	if len(mcpCommands) == 0 {
+		report.add("warn", "未配置 --mcp-servers-json")
+	} else {
+		for _, item := range mcpCommands {
+			if item.Command == "" {
+				report.add("warn", fmt.Sprintf("MCP server=%q 未配置 command", item.Name))
+				continue
+			}
+			if _, err := exec.LookPath(item.Command); err != nil {
+				report.add("error", fmt.Sprintf("MCP server=%q command=%q 不可执行: %v", item.Name, item.Command, err))
+				continue
+			}
+			report.add("ok", fmt.Sprintf("MCP server=%q command 可执行: %s", item.Name, item.Command))
+		}
+	}
+
+	return report
+}
+
+func (r *doctorReport) add(level, text string) {
+	r.findings = append(r.findings, doctorFinding{Level: strings.TrimSpace(level), Text: strings.TrimSpace(text)})
+}
+
+func (r doctorReport) lines() []string {
+	out := make([]string, 0, len(r.findings)+1)
+	out = append(out, "Copilot doctor report")
+	for _, item := range r.findings {
+		prefix := "[INFO]"
+		switch strings.ToLower(strings.TrimSpace(item.Level)) {
+		case "ok":
+			prefix = "[ OK ]"
+		case "warn":
+			prefix = "[WARN]"
+		case "error":
+			prefix = "[ERR ]"
+		}
+		out = append(out, fmt.Sprintf("%s %s", prefix, item.Text))
+	}
+	out = append(out, fmt.Sprintf("summary: errors=%d warnings=%d", r.errorCount(), r.warnCount()))
+	return out
+}
+
+func (r doctorReport) errorCount() int {
+	n := 0
+	for _, item := range r.findings {
+		if strings.EqualFold(strings.TrimSpace(item.Level), "error") {
+			n++
+		}
+	}
+	return n
+}
+
+func (r doctorReport) warnCount() int {
+	n := 0
+	for _, item := range r.findings {
+		if strings.EqualFold(strings.TrimSpace(item.Level), "warn") {
+			n++
+		}
+	}
+	return n
+}
+
+func (r doctorReport) hasError() bool {
+	return r.errorCount() > 0
+}
+
+func checkSkillDir(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("skills 目录为空")
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("skills 目录不可用(%s): %w", path, err)
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("skills 路径不是目录(%s)", path)
+	}
+	return nil
+}
+
+type namedCommand struct {
+	Name    string
+	Command string
+}
+
+func extractMCPServerCommands(raw string) []namedCommand {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var payload map[string]map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	out := make([]namedCommand, 0, len(payload))
+	for name, cfg := range payload {
+		cmd := ""
+		if cfg != nil {
+			if v, ok := cfg["command"]; ok {
+				cmd = strings.TrimSpace(fmt.Sprint(v))
+				if cmd == "<nil>" {
+					cmd = ""
+				}
+			}
+		}
+		out = append(out, namedCommand{Name: strings.TrimSpace(name), Command: cmd})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func extractCustomAgentNamesFromJSON(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var payload []map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(payload))
+	for _, item := range payload {
+		name := strings.TrimSpace(fmt.Sprint(item["name"]))
+		if name == "" || name == "<nil>" {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+type inspectInput struct {
+	Model                string
+	ReasoningEffort      string
+	Streaming            bool
+	ConfigDir            string
+	SessionWorkingDir    string
+	UseLoggedInUser      bool
+	HasGitHubToken       bool
+	EnableDemoEchoTool   bool
+	EnableInfiniteSesion bool
+	ProfileName          string
+	ProfileFile          string
+	Advanced             *advancedConfig
+	CustomAgentsJSON     string
+	MCPServersJSON       string
+}
+
+func buildInspectSummary(in inspectInput) map[string]any {
+	systemMessage := map[string]any{"enabled": false}
+	if in.Advanced != nil && in.Advanced.SystemMessage != nil {
+		systemMessage["enabled"] = true
+		systemMessage["mode"] = strings.TrimSpace(in.Advanced.SystemMessage.Mode)
+		systemMessage["hasContent"] = strings.TrimSpace(in.Advanced.SystemMessage.Content) != ""
+		systemMessage["sectionOverrideCount"] = len(in.Advanced.SystemMessage.Sections)
+	}
+
+	mcpServers := extractMCPServerCommands(in.MCPServersJSON)
+	mcpNames := make([]string, 0, len(mcpServers))
+	for _, item := range mcpServers {
+		mcpNames = append(mcpNames, item.Name)
+	}
+
+	toolNames := make([]string, 0)
+	if in.Advanced != nil {
+		toolNames = extractToolNames(in.Advanced.Tools)
+	}
+
+	return map[string]any{
+		"model":                  withDefault(strings.TrimSpace(in.Model), "gpt-5"),
+		"reasoningEffort":        strings.TrimSpace(in.ReasoningEffort),
+		"profile":                map[string]any{"name": strings.TrimSpace(in.ProfileName), "file": strings.TrimSpace(in.ProfileFile)},
+		"streaming":              in.Streaming,
+		"configDir":              strings.TrimSpace(in.ConfigDir),
+		"workingDirectory":       strings.TrimSpace(in.SessionWorkingDir),
+		"auth":                   map[string]any{"useLoggedInUser": in.UseLoggedInUser, "hasGitHubToken": in.HasGitHubToken},
+		"systemMessage":          systemMessage,
+		"skillDirectories":       safeSlice(in.Advanced, func(a *advancedConfig) []string { return a.SkillDirectories }),
+		"disabledSkills":         safeSlice(in.Advanced, func(a *advancedConfig) []string { return a.DisabledSkills }),
+		"availableTools":         safeSlice(in.Advanced, func(a *advancedConfig) []string { return a.AvailableTools }),
+		"excludedTools":          safeSlice(in.Advanced, func(a *advancedConfig) []string { return a.ExcludedTools }),
+		"customToolNames":        toolNames,
+		"enableDemoEchoTool":     in.EnableDemoEchoTool,
+		"customAgentNames":       extractCustomAgentNamesFromJSON(in.CustomAgentsJSON),
+		"activeAgent":            safeString(in.Advanced, func(a *advancedConfig) string { return a.Agent }),
+		"mcpServers":             mcpNames,
+		"enableInfiniteSessions": in.EnableInfiniteSesion,
+	}
+}
+
+func extractToolNames(tools []copilot.Tool) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(tools))
+	for _, t := range tools {
+		name := strings.TrimSpace(t.Name)
+		if name == "" {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func safeSlice(adv *advancedConfig, get func(*advancedConfig) []string) []string {
+	if adv == nil {
+		return nil
+	}
+	return get(adv)
+}
+
+func safeString(adv *advancedConfig, get func(*advancedConfig) string) string {
+	if adv == nil {
+		return ""
+	}
+	return strings.TrimSpace(get(adv))
 }
