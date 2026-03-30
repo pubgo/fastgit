@@ -197,3 +197,52 @@ services:
 - 在 Web 界面中可以单独重启或停止某个服务
 - 按 `Ctrl+C` 停止所有服务
 
+## 转码路由（新增）
+
+以下路由用于将 OpenAPI/HTTP、WebSocket、MQTT 消息转码后调用 gRPC（基于 `grpcurl`，需本机可执行）：
+
+- OpenAPI/HTTP -> gRPC：`POST /api/openapi/transcode/grpc`
+- WebSocket -> gRPC：`GET /api/websocket/transcode/grpc`
+- MQTT -> gRPC：`POST /api/mqtt/transcode/grpc`
+
+### OpenAPI/HTTP 转码示例
+
+请求体：
+
+```json
+{
+  "endpoint": "127.0.0.1:50051",
+  "method": "helloworld.Greeter/SayHello",
+  "data": {"name": "fastgit"},
+  "headers": {"x-request-id": "demo-1"},
+  "plaintext": true
+}
+```
+
+### WebSocket 转码示例
+
+连接：`ws://127.0.0.1:8080/api/websocket/transcode/grpc`
+
+每条消息发送与 HTTP 相同结构 JSON，服务端逐条返回转码结果。
+
+### MQTT 转码示例
+
+请求体：
+
+```json
+{
+  "topic": "devices/123/up",
+  "payload": {"temp": 25.6},
+  "grpc": {
+    "endpoint": "127.0.0.1:50051",
+    "method": "iot.DeviceService/Report",
+    "plaintext": true
+  }
+}
+```
+
+说明：
+
+- 当 `grpc.data` 为空时，会自动使用 `payload` 作为 gRPC 入参。
+- 若 `payload` 是 JSON 对象，会自动补充 `mqtt_topic` 字段（若原本不存在）。
+

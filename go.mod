@@ -32,6 +32,7 @@ require (
 	github.com/github/copilot-sdk/go v0.2.0
 	github.com/go-git/go-git/v6 v6.0.0-20250922101824-23ffe67a3eb3
 	github.com/google/go-github/v71 v71.0.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/go-getter v1.7.9
 	github.com/hashicorp/go-version v1.7.0
 	github.com/joho/godotenv v1.5.1
@@ -47,6 +48,8 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/match v1.1.1
 	github.com/yarlson/tap v0.10.5
+	golang.org/x/crypto v0.43.0
+	golang.org/x/term v0.41.0
 	google.golang.org/genai v1.24.0
 	gopkg.in/yaml.v3 v3.0.1
 	mvdan.cc/sh/v3 v3.12.0
@@ -111,7 +114,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/itchyny/gojq v0.12.17 // indirect
@@ -164,13 +166,11 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp v0.0.0-20250711185948-6ae5c78190dc // indirect
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/api v0.241.0 // indirect
