@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/gorilla/websocket"
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/pathutil"
 	"github.com/pubgo/funk/v2/recovery"
@@ -74,6 +75,35 @@ type LogEntry struct {
 	Time    time.Time `json:"time"`
 	Level   string    `json:"level"`
 	Message string    `json:"message"`
+}
+
+type grpcTranscodeRequest struct {
+	Endpoint  string            `json:"endpoint"`
+	Method    string            `json:"method"`
+	Data      json.RawMessage   `json:"data"`
+	Headers   map[string]string `json:"headers,omitempty"`
+	Plaintext *bool             `json:"plaintext,omitempty"`
+}
+
+type mqttTranscodeRequest struct {
+	Topic   string               `json:"topic"`
+	Payload json.RawMessage      `json:"payload"`
+	GRPC    grpcTranscodeRequest `json:"grpc"`
+}
+
+type transcodeResult struct {
+	Success bool            `json:"success"`
+	Route   string          `json:"route"`
+	Output  json.RawMessage `json:"output,omitempty"`
+	Raw     string          `json:"raw,omitempty"`
+	Error   string          `json:"error,omitempty"`
+	Topic   string          `json:"topic,omitempty"`
+}
+
+var wsUpgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
 func New() *redant.Command {
@@ -525,6 +555,15 @@ func (m *DevManager) startWebServer() {
 	mux.HandleFunc("/api/restart", m.handleRestart)
 	mux.HandleFunc("/api/stop", m.handleStop)
 
+	// OpenAPI 路由：HTTP 转码 gRPC
+	mux.HandleFunc("/api/openapi/transcode/grpc", m.handleOpenAPIHTTPToGRPC)
+
+	// WebSocket 路由：WebSocket 转码 gRPC
+	mux.HandleFunc("/api/websocket/transcode/grpc", m.handleWebSocketToGRPC)
+
+	// MQTT 路由：MQTT 转码 gRPC
+	mux.HandleFunc("/api/mqtt/transcode/grpc", m.handleMQTTToGRPC)
+
 	addr := fmt.Sprintf(":%d", m.webPort)
 	log.Info().Msgf("Web 管理界面启动在 http://localhost%s", addr)
 
@@ -536,6 +575,171 @@ func (m *DevManager) startWebServer() {
 	if err := m.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error().Err(err).Msg("Web 服务器错误")
 	}
+}
+
+func (m *DevManager) handleOpenAPIHTTPToGRPC(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req grpcTranscodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		m.writeTranscodeError(w, http.StatusBadRequest, "openapi/http->grpc", fmt.Errorf("invalid request body: %w", err), "")
+		return
+	}
+
+	output, raw, err := transcodeGRPC(r.Context(), req)
+	if err != nil {
+		m.writeTranscodeError(w, http.StatusBadGateway, "openapi/http->grpc", err, raw)
+		return
+	}
+
+	m.writeTranscodeOK(w, transcodeResult{
+		Success: true,
+		Route:   "openapi/http->grpc",
+		Output:  output,
+		Raw:     raw,
+	})
+}
+
+func (m *DevManager) handleWebSocketToGRPC(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		m.writeTranscodeError(w, http.StatusBadRequest, "websocket->grpc", err, "")
+		return
+	}
+	defer conn.Close()
+
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+
+		var req grpcTranscodeRequest
+		if err := json.Unmarshal(msg, &req); err != nil {
+			_ = conn.WriteJSON(transcodeResult{Success: false, Route: "websocket->grpc", Error: fmt.Sprintf("invalid request: %v", err)})
+			continue
+		}
+
+		output, raw, err := transcodeGRPC(r.Context(), req)
+		if err != nil {
+			_ = conn.WriteJSON(transcodeResult{Success: false, Route: "websocket->grpc", Error: err.Error(), Raw: raw})
+			continue
+		}
+
+		_ = conn.WriteJSON(transcodeResult{
+			Success: true,
+			Route:   "websocket->grpc",
+			Output:  output,
+			Raw:     raw,
+		})
+	}
+}
+
+func (m *DevManager) handleMQTTToGRPC(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req mqttTranscodeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		m.writeTranscodeError(w, http.StatusBadRequest, "mqtt->grpc", fmt.Errorf("invalid request body: %w", err), "")
+		return
+	}
+
+	grpcReq := req.GRPC
+	if len(grpcReq.Data) == 0 && len(req.Payload) > 0 {
+		grpcReq.Data = req.Payload
+	}
+
+	if len(grpcReq.Data) > 0 {
+		var obj map[string]interface{}
+		if err := json.Unmarshal(grpcReq.Data, &obj); err == nil {
+			if req.Topic != "" {
+				if _, exists := obj["mqtt_topic"]; !exists {
+					obj["mqtt_topic"] = req.Topic
+				}
+			}
+			patched, _ := json.Marshal(obj)
+			grpcReq.Data = patched
+		}
+	}
+
+	output, raw, err := transcodeGRPC(r.Context(), grpcReq)
+	if err != nil {
+		m.writeTranscodeError(w, http.StatusBadGateway, "mqtt->grpc", err, raw)
+		return
+	}
+
+	m.writeTranscodeOK(w, transcodeResult{
+		Success: true,
+		Route:   "mqtt->grpc",
+		Topic:   req.Topic,
+		Output:  output,
+		Raw:     raw,
+	})
+}
+
+func transcodeGRPC(ctx context.Context, req grpcTranscodeRequest) (json.RawMessage, string, error) {
+	if strings.TrimSpace(req.Endpoint) == "" {
+		return nil, "", fmt.Errorf("endpoint is required")
+	}
+	if strings.TrimSpace(req.Method) == "" {
+		return nil, "", fmt.Errorf("method is required")
+	}
+
+	if _, err := exec.LookPath("grpcurl"); err != nil {
+		return nil, "", fmt.Errorf("grpcurl is required in PATH: %w", err)
+	}
+
+	payload := req.Data
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
+	}
+
+	args := make([]string, 0, 16)
+	if req.Plaintext == nil || *req.Plaintext {
+		// 默认按明文连接，便于本地开发环境直接转码；传 false 时走 TLS。
+		args = append(args, "-plaintext")
+	}
+	for k, v := range req.Headers {
+		args = append(args, "-H", fmt.Sprintf("%s: %s", k, v))
+	}
+	args = append(args, "-d", string(payload), req.Endpoint, req.Method)
+
+	cmd := exec.CommandContext(ctx, "grpcurl", args...)
+	out, err := cmd.CombinedOutput()
+	raw := strings.TrimSpace(string(out))
+	if err != nil {
+		return nil, raw, fmt.Errorf("grpcurl failed: %w", err)
+	}
+
+	data := json.RawMessage(out)
+	if !json.Valid(data) {
+		wrapped, _ := json.Marshal(map[string]string{"raw": raw})
+		data = wrapped
+	}
+
+	return data, raw, nil
+}
+
+func (m *DevManager) writeTranscodeOK(w http.ResponseWriter, data transcodeResult) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(data)
+}
+
+func (m *DevManager) writeTranscodeError(w http.ResponseWriter, status int, route string, err error, raw string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(transcodeResult{
+		Success: false,
+		Route:   route,
+		Error:   err.Error(),
+		Raw:     raw,
+	})
 }
 
 func (m *DevManager) handleIndex(w http.ResponseWriter, r *http.Request) {

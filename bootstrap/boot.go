@@ -13,9 +13,11 @@ import (
 	"github.com/pubgo/fastgit/cmds/chglogcmd"
 	"github.com/pubgo/fastgit/cmds/configcmd"
 	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
+	"github.com/pubgo/fastgit/cmds/ggccmd"
 	"github.com/pubgo/fastgit/cmds/historycmd"
 	"github.com/pubgo/fastgit/cmds/initcmd"
 	"github.com/pubgo/fastgit/cmds/pullcmd"
+	"github.com/pubgo/fastgit/cmds/sshcmd"
 	"github.com/pubgo/fastgit/cmds/tagcmd"
 	"github.com/pubgo/fastgit/cmds/upgradecmd"
 	"github.com/pubgo/fastgit/cmds/versioncmd"
@@ -35,7 +37,9 @@ func Main() {
 		initcmd.New(),
 		upgradecmd.New(),
 		tagcmd.New(),
+		sshcmd.New(),
 		historycmd.New(),
+		ggccmd.New(),
 		fastcommitcmd.New(),
 		configcmd.New(),
 		pullcmd.New(),

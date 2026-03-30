@@ -6,23 +6,21 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/briandowns/spinner"
-	"github.com/pubgo/dix/v2"
-	"github.com/pubgo/dix/v2/dixcontext"
-	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/redant"
-	"github.com/sashabaranov/go-openai"
-	"github.com/yarlson/tap"
 
 	"github.com/pubgo/fastgit/utils"
 )
+
+type flagOptions struct {
+	showPrompt bool
+	fastCommit bool
+	amend      bool
+}
 
 type Config struct {
 	GenVersion bool `yaml:"gen_version"`
@@ -34,15 +32,54 @@ type cmdParams struct {
 }
 
 func New() *redant.Command {
-	var flags = new(struct {
-		showPrompt bool
-		fastCommit bool
-		amend      bool
-	})
+	var flags = new(flagOptions)
 
 	app := &redant.Command{
 		Use:   "commit",
 		Short: "Intelligent generation of git commit message",
+		Children: []*redant.Command{
+			{
+				Use:   "ai",
+				Short: "AI powered commit flow",
+				Options: []redant.Option{
+					{
+						Flag:        "prompt",
+						Description: "Show prompt.",
+						Value:       redant.BoolOf(&flags.showPrompt),
+					},
+					{
+						Flag:        "fast",
+						Description: "Quickly generate messages without prompts.",
+						Value:       redant.BoolOf(&flags.fastCommit),
+					},
+					{
+						Flag:        "amend",
+						Description: "Amend the last commit.",
+						Value:       redant.BoolOf(&flags.amend),
+					},
+				},
+				Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
+					defer result.RecoveryErr(&gErr, func(err error) error {
+						if errors.Is(err, context.Canceled) {
+							return nil
+						}
+
+						if err.Error() == "signal: interrupt" {
+							return nil
+						}
+
+						return err
+					})
+
+					if len(i.Command.Args) > 0 {
+						log.Error(ctx).Msgf("unknown command:%v", i.Command.Args)
+						return redant.DefaultHelpFn()(ctx, i)
+					}
+
+					return runAICommit(ctx, flags)
+				},
+			},
+		},
 		Options: []redant.Option{
 			{
 				Flag:        "prompt",
@@ -61,10 +98,6 @@ func New() *redant.Command {
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
-			di := dixcontext.Get(ctx)
-			var params cmdParams
-			params = dix.Inject(di, params)
-
 			defer result.RecoveryErr(&gErr, func(err error) error {
 				if errors.Is(err, context.Canceled) {
 					return nil
@@ -83,165 +116,7 @@ func New() *redant.Command {
 				return redant.DefaultHelpFn()(ctx, i)
 			}
 
-			utils.LogConfigAndBranch()
-
-			res := utils.PreGitPush(ctx)
-			if res != "" {
-				if shouldPullDueToRemoteUpdate(res) {
-					err := gitPull()
-					if err != nil {
-						if isMergeConflict() {
-							handleMergeConflict()
-						} else {
-							os.Exit(1)
-						}
-					} else {
-						informUserToAmendAndPush()
-					}
-				}
-			}
-
-			//username := strings.TrimSpace(assert.Must1(utils.ShellExecOutput("git", "config", "get", "user.name")))
-
-			if flags.fastCommit {
-				isDirty := utils.IsDirty().Unwrap()
-				if !isDirty {
-					return
-				}
-
-				preMsg := strings.TrimSpace(utils.ShellExecOutput(ctx, "git", "log", "-1", "--pretty=%B").Unwrap())
-				prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
-				msg := fmt.Sprintf("%s at %s", prefixMsg, time.Now().Format(time.DateTime))
-
-				msg = strings.TrimSpace(tap.Text(ctx, tap.TextOptions{
-					Message:      "git message(update or enter):",
-					InitialValue: msg,
-					DefaultValue: msg,
-					Placeholder:  "update or enter",
-				}))
-
-				if msg == "" {
-					return
-				}
-
-				assert.Must(utils.ShellExec(ctx, "git", "add", "-A"))
-				res := utils.ShellExecOutput(ctx, "git", "status").Unwrap()
-
-				if !flags.amend {
-					assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
-				} else {
-					if strings.Contains(preMsg, prefixMsg) && !strings.Contains(res, `(use "git commit" to conclude merge)`) {
-						assert.Must(utils.ShellExec(ctx, "git", "commit", "--amend", "--no-edit", "-m", strconv.Quote(msg)))
-					} else {
-						assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
-					}
-				}
-
-				res = utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
-				if shouldPullDueToRemoteUpdate(res) {
-					err := gitPull()
-					if err != nil {
-						if isMergeConflict() {
-							handleMergeConflict()
-						} else {
-							os.Exit(1)
-						}
-					} else {
-						informUserToAmendAndPush()
-					}
-				}
-				return
-			}
-
-			// 非快速提交模式：遍历git log，将非prefixMsg开头的提交合并为一次提交
-			prefixMsg := fmt.Sprintf("chore: quick update %s", utils.GetBranchName())
-			targetCommit := getFirstNonPrefixCommit(ctx, prefixMsg)
-
-			// 如果找到了第一个没有prefixMsg的提交，则重置到该提交
-			if targetCommit != "" {
-				assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", targetCommit))
-			} else {
-				// 如果没有找到非prefixMsg的提交，说明所有提交都是prefixMsg开头的，或者没有提交
-				// 这种情况下，我们重置到初始状态
-				commitsToSquash := getCommitsToSquash(ctx, prefixMsg)
-				if len(commitsToSquash) > 0 {
-					parentCommit := getParentCommit(ctx, commitsToSquash[0])
-					if parentCommit != "" {
-						assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", parentCommit))
-					} else {
-						// 如果没有父提交（即第一个提交），重置到初始状态
-						assert.Must(utils.ShellExec(ctx, "git", "reset", "--soft", "HEAD~"+strconv.Itoa(len(commitsToSquash))))
-					}
-				}
-			}
-
-			if utils.IsDirty().Unwrap() {
-				assert.Must(utils.ShellExec(ctx, "git", "add", "--update"))
-			}
-
-			// 获取当前所有变动的文件（重置后的工作区状态）
-			diffResult := utils.GetStagedDiff(ctx).Unwrap()
-			if diffResult == nil || len(diffResult.Files) == 0 {
-				return nil
-			}
-
-			log.Info().Msg(utils.GetDetectedMessage(diffResult.Files))
-			for _, file := range diffResult.Files {
-				log.Info().Msg("file: " + file)
-			}
-
-			s := spinner.New(spinner.CharSets[35], 100*time.Millisecond, func(s *spinner.Spinner) {
-				s.Prefix = "generate git message: "
-			})
-			s.Start()
-			generatePrompt := utils.GeneratePrompt("en", 50, utils.ConventionalCommitType)
-			resp, err := params.OpenaiClient.Client.CreateChatCompletion(
-				ctx,
-				openai.ChatCompletionRequest{
-					Model: params.OpenaiClient.Cfg.Model,
-					Messages: []openai.ChatCompletionMessage{
-						{
-							Role:    openai.ChatMessageRoleSystem,
-							Content: generatePrompt,
-						},
-						{
-							Role:    openai.ChatMessageRoleUser,
-							Content: diffResult.Diff,
-						},
-					},
-				},
-			)
-			s.Stop()
-
-			if err != nil {
-				log.Err(err).Msg("failed to call openai")
-				return errors.WrapCaller(err)
-			}
-
-			if len(resp.Choices) == 0 {
-				return nil
-			}
-
-			msg := resp.Choices[0].Message.Content
-			msg = strings.TrimSpace(tap.Text(ctx, tap.TextOptions{
-				Message:      "git message(update or enter):",
-				InitialValue: msg,
-				DefaultValue: msg,
-				Placeholder:  "update or enter",
-			}))
-
-			if msg == "" {
-				return
-			}
-
-			// 创建新的提交
-			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
-			utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
-			if flags.showPrompt {
-				fmt.Println("\n" + generatePrompt + "\n")
-			}
-			log.Info().Any("usage", resp.Usage).Msg("openai response usage")
-			return
+			return runAICommit(ctx, flags)
 		},
 	}
 
