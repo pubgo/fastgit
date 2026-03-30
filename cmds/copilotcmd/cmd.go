@@ -483,7 +483,9 @@ func New() *redant.Command {
 		},
 	}
 
-	rootCmd.Children = []*redant.Command{chatCmd, resumeCmd, sessionsCmd, statusCmd, modelsCmd, doctorCmd, inspectCmd, interactiveDemoCmd}
+	skillsCmd := newSkillsCmd(&profileName, &profileFile, &skillDirs)
+
+	rootCmd.Children = []*redant.Command{chatCmd, resumeCmd, sessionsCmd, statusCmd, modelsCmd, doctorCmd, inspectCmd, skillsCmd, interactiveDemoCmd}
 	rootCmd.Handler = func(ctx context.Context, inv *redant.Invocation) error {
 		defer rt.Close(inv.Stderr)
 		return agentlineapp.Run(ctx, rootCmd, &agentlineapp.RuntimeOptions{Prompt: "copilot> ", Stdin: inv.Stdin, Stdout: inv.Stdout})
