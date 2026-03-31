@@ -11,7 +11,17 @@ import (
 )
 
 type Entry struct {
+	ID          string         `json:"id,omitempty"`
+	Kind        string         `json:"kind,omitempty"`
+	Namespace   string         `json:"namespace,omitempty"`
 	Name        string         `json:"name"`
+	Slug        string         `json:"slug,omitempty"`
+	DisplayName string         `json:"displayName,omitempty"`
+	Summary     string         `json:"summary,omitempty"`
+	Version     string         `json:"version,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	UseWhen     []string       `json:"useWhen,omitempty"`
+	Tools       []string       `json:"tools,omitempty"`
 	Path        string         `json:"path"`
 	Dir         string         `json:"dir"`
 	Description string         `json:"description,omitempty"`
@@ -46,11 +56,18 @@ type CreateInput struct {
 type frontmatter struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
+	Summary     string `yaml:"summary"`
 }
 
 type ParsedSkill struct {
 	Name        string
+	Slug        string
 	Description string
+	Summary     string
+	Version     string
+	Tags        []string
+	UseWhen     []string
+	Tools       []string
 	Title       string
 	H2          []string
 	H3          []string
@@ -107,7 +124,17 @@ func Discover(skillDirs []string) ([]Entry, []string) {
 			}
 			seen[key] = struct{}{}
 			entries = append(entries, Entry{
+				ID:          buildSkillID(root, parsed.Name),
+				Kind:        "local",
+				Namespace:   strings.TrimSpace(root),
 				Name:        parsed.Name,
+				Slug:        parsed.Slug,
+				DisplayName: parsed.Title,
+				Summary:     parsed.Summary,
+				Version:     parsed.Version,
+				Tags:        parsed.Tags,
+				UseWhen:     parsed.UseWhen,
+				Tools:       parsed.Tools,
 				Path:        skillPath,
 				Dir:         skillDir,
 				Description: parsed.Description,
@@ -193,7 +220,15 @@ func CreateSkill(in CreateInput) (Entry, error) {
 	if err := os.WriteFile(targetFile, []byte(tpl), filePerm); err != nil {
 		return Entry{}, fmt.Errorf("write skill file(%s): %w", targetFile, err)
 	}
-	return Entry{Name: name, Path: targetFile, Dir: targetDir}, nil
+	return Entry{
+		ID:        buildSkillID(baseDir, name),
+		Kind:      "local",
+		Namespace: strings.TrimSpace(baseDir),
+		Name:      name,
+		Slug:      name,
+		Path:      targetFile,
+		Dir:       targetDir,
+	}, nil
 }
 
 func ExistingDirs(candidates []string) []string {
@@ -235,7 +270,12 @@ func BuildTemplate(name string) string {
 	name = SanitizeName(name)
 	return fmt.Sprintf(`---
 name: %s
+summary: "%s 技能摘要"
 description: "Use when: 描述这个 skill 适用场景（关键词越具体越好）"
+version: "0.1.0"
+tags: ["repo", "workflow"]
+use_when: ["当你需要处理该类任务时"]
+tools: ["skills_tool"]
 ---
 
 # %s
@@ -251,7 +291,7 @@ description: "Use when: 描述这个 skill 适用场景（关键词越具体越�
 1. 理解问题与边界。
 2. 检索并确认相关文件。
 3. 给出最小可执行方案。
-`, name, name)
+`, name, name, name)
 }
 
 func ParseFile(path string, fallbackName string) (ParsedSkill, error) {
@@ -268,7 +308,7 @@ func ParseContent(content, fallbackName string) (ParsedSkill, error) {
 		fallbackName = "skill"
 	}
 
-	result := ParsedSkill{Name: fallbackName, Source: "directory", Metadata: map[string]any{}}
+	result := ParsedSkill{Name: fallbackName, Slug: fallbackName, Source: "directory", Metadata: map[string]any{}}
 	body := strings.TrimSpace(content)
 	if body == "" {
 		return result, nil
@@ -284,17 +324,30 @@ func ParseContent(content, fallbackName string) (ParsedSkill, error) {
 			return ParsedSkill{}, err
 		}
 		result.Metadata = meta
+		result.Summary = strings.TrimSpace(fm.Summary)
 		if strings.TrimSpace(fm.Name) != "" {
 			n := SanitizeName(fm.Name)
 			if n == "" {
 				return ParsedSkill{}, fmt.Errorf("invalid frontmatter name: %q", fm.Name)
 			}
 			result.Name = n
+			result.Slug = n
 			result.Source = "frontmatter.name"
 		}
 		if strings.TrimSpace(fm.Description) != "" {
 			result.Description = strings.TrimSpace(fm.Description)
 		}
+		spec := extractSkillSpec(meta)
+		if result.Summary == "" {
+			result.Summary = spec.Summary
+		}
+		if result.Description == "" {
+			result.Description = spec.Summary
+		}
+		result.Version = spec.Version
+		result.Tags = spec.Tags
+		result.UseWhen = spec.UseWhen
+		result.Tools = spec.Tools
 		body = rest
 	}
 
@@ -304,6 +357,7 @@ func ParseContent(content, fallbackName string) (ParsedSkill, error) {
 		h := SanitizeName(title)
 		if h != "" && result.Source == "directory" {
 			result.Name = h
+			result.Slug = h
 			result.Source = "heading"
 		}
 	}
@@ -466,6 +520,91 @@ func parseFrontmatterMap(raw string) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	return meta, nil
+}
+
+type skillSpec struct {
+	Summary string
+	Version string
+	Tags    []string
+	UseWhen []string
+	Tools   []string
+}
+
+func extractSkillSpec(meta map[string]any) skillSpec {
+	if meta == nil {
+		return skillSpec{}
+	}
+	return skillSpec{
+		Summary: firstString(meta, "summary", "brief", "abstract"),
+		Version: firstString(meta, "version", "skill_version"),
+		Tags:    firstStringSlice(meta, "tags", "keywords"),
+		UseWhen: firstStringSlice(meta, "use_when", "useWhen", "when"),
+		Tools:   firstStringSlice(meta, "tools", "available_tools", "tool_allowlist"),
+	}
+}
+
+func firstString(meta map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := meta[k]; ok {
+			s := strings.TrimSpace(fmt.Sprint(v))
+			if s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func firstStringSlice(meta map[string]any, keys ...string) []string {
+	for _, k := range keys {
+		if v, ok := meta[k]; ok {
+			items := toStringSlice(v)
+			if len(items) > 0 {
+				return items
+			}
+		}
+	}
+	return nil
+}
+
+func toStringSlice(v any) []string {
+	switch tv := v.(type) {
+	case string:
+		trimmed := strings.TrimSpace(tv)
+		if trimmed == "" {
+			return nil
+		}
+		return []string{trimmed}
+	case []string:
+		return CompactStringSlice(tv)
+	case []any:
+		out := make([]string, 0, len(tv))
+		for _, item := range tv {
+			s := strings.TrimSpace(fmt.Sprint(item))
+			if s != "" && s != "<nil>" {
+				out = append(out, s)
+			}
+		}
+		return CompactStringSlice(out)
+	default:
+		s := strings.TrimSpace(fmt.Sprint(tv))
+		if s == "" || s == "<nil>" {
+			return nil
+		}
+		return []string{s}
+	}
+}
+
+func buildSkillID(namespace, name string) string {
+	namespace = strings.TrimSpace(namespace)
+	name = SanitizeName(name)
+	if namespace == "" {
+		namespace = "local"
+	}
+	if name == "" {
+		name = "skill"
+	}
+	return namespace + ":" + name
 }
 
 func CompactStringSlice(in []string) []string {

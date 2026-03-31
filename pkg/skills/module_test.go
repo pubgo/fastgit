@@ -11,6 +11,11 @@ func TestParseContent_FrontmatterPreferred(t *testing.T) {
 	content := `---
 name: go-review
 description: "Use when: review go changes"
+summary: "review staged diff and suggest commit"
+version: "1.2.3"
+tags: ["go", "review"]
+use_when: ["review go changes", "check staged diff"]
+tools: ["git", "skills_tool"]
 ---
 
 # should-be-ignored
@@ -25,6 +30,21 @@ description: "Use when: review go changes"
 	}
 	if parsed.Description != "Use when: review go changes" {
 		t.Fatalf("unexpected description: %s", parsed.Description)
+	}
+	if parsed.Summary != "review staged diff and suggest commit" {
+		t.Fatalf("unexpected summary: %s", parsed.Summary)
+	}
+	if parsed.Version != "1.2.3" {
+		t.Fatalf("unexpected version: %s", parsed.Version)
+	}
+	if len(parsed.Tags) != 2 || parsed.Tags[0] != "go" {
+		t.Fatalf("unexpected tags: %#v", parsed.Tags)
+	}
+	if len(parsed.UseWhen) != 2 {
+		t.Fatalf("unexpected use_when: %#v", parsed.UseWhen)
+	}
+	if len(parsed.Tools) != 2 {
+		t.Fatalf("unexpected tools: %#v", parsed.Tools)
 	}
 	if parsed.Source != "frontmatter.name" {
 		t.Fatalf("expected source frontmatter.name, got %s", parsed.Source)
@@ -42,6 +62,9 @@ something`
 	}
 	if parsed.Name != "repo-context" {
 		t.Fatalf("expected name repo-context, got %s", parsed.Name)
+	}
+	if parsed.Slug != "repo-context" {
+		t.Fatalf("expected slug repo-context, got %s", parsed.Slug)
 	}
 	if parsed.Source != "heading" {
 		t.Fatalf("expected source heading, got %s", parsed.Source)
@@ -206,6 +229,12 @@ description: "Use when: review go changes"
 			if e.Source != "heading" {
 				t.Fatalf("expected repo-context source=heading, got %s", e.Source)
 			}
+			if e.Kind != "local" {
+				t.Fatalf("expected kind=local, got %s", e.Kind)
+			}
+			if e.Slug != "repo-context" {
+				t.Fatalf("expected slug repo-context, got %s", e.Slug)
+			}
 			if e.Title != "Repo Context" {
 				t.Fatalf("expected title Repo Context, got %s", e.Title)
 			}
@@ -216,6 +245,12 @@ description: "Use when: review go changes"
 			}
 			if e.Description != "Use when: review go changes" {
 				t.Fatalf("unexpected description: %s", e.Description)
+			}
+			if e.ID == "" {
+				t.Fatalf("expected non-empty id")
+			}
+			if e.Namespace != root {
+				t.Fatalf("expected namespace=%s, got %s", root, e.Namespace)
 			}
 			if e.Metadata["name"] != "go-review" {
 				t.Fatalf("expected metadata name=go-review, got %#v", e.Metadata["name"])
@@ -238,5 +273,39 @@ description: "Use when: review go changes"
 	}
 	if !hasBrokenWarn {
 		t.Fatalf("expected parse warning for broken-skill, got warns=%v", warns)
+	}
+}
+
+func TestParseContent_SpecFallbackKeys(t *testing.T) {
+	content := `---
+name: codex-like
+abstract: "portable skill summary"
+skill_version: "2026.03"
+keywords: ["agent", "skill"]
+when: "when model requests workspace context"
+available_tools: ["skills_tool", "grep"]
+---
+
+# Codex Like
+`
+
+	parsed, err := ParseContent(content, "fallback")
+	if err != nil {
+		t.Fatalf("ParseContent returned error: %v", err)
+	}
+	if parsed.Summary != "portable skill summary" {
+		t.Fatalf("expected summary from abstract, got %s", parsed.Summary)
+	}
+	if parsed.Version != "2026.03" {
+		t.Fatalf("expected version from skill_version, got %s", parsed.Version)
+	}
+	if len(parsed.Tags) != 2 || parsed.Tags[1] != "skill" {
+		t.Fatalf("unexpected tags: %#v", parsed.Tags)
+	}
+	if len(parsed.UseWhen) != 1 || parsed.UseWhen[0] != "when model requests workspace context" {
+		t.Fatalf("unexpected use_when: %#v", parsed.UseWhen)
+	}
+	if len(parsed.Tools) != 2 || parsed.Tools[0] != "skills_tool" {
+		t.Fatalf("unexpected tools: %#v", parsed.Tools)
 	}
 }
