@@ -16,6 +16,7 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 	agentlineapp "github.com/pubgo/fastgit/cmds/agentlineapp"
 	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
+	skillsmodule "github.com/pubgo/fastgit/pkg/skills"
 	"github.com/pubgo/redant"
 )
 
@@ -50,6 +51,7 @@ func New() *redant.Command {
 		agentName             string
 		customToolsJSON       string
 		enableDemoEchoTool    bool
+		enableSkillsTool      bool
 		enableInfiniteSession bool
 
 		prompt    string
@@ -91,6 +93,7 @@ func New() *redant.Command {
 			{Flag: "agent", Description: "激活的自定义 agent 名称", Value: redant.StringOf(&agentName)},
 			{Flag: "custom-tools-json", Description: "自定义工具 JSON（array）", Value: redant.StringOf(&customToolsJSON)},
 			{Flag: "enable-demo-echo-tool", Description: "启用内置 demo_echo 工具", Value: redant.BoolOf(&enableDemoEchoTool), Default: "false"},
+			{Flag: "enable-skills-tool", Description: "启用内置 skills_tool function call", Value: redant.BoolOf(&enableSkillsTool), Default: "true"},
 			{Flag: "enable-infinite-sessions", Description: "启用 Infinite Sessions", Value: redant.BoolOf(&enableInfiniteSession), Default: "true"},
 		},
 	}
@@ -124,6 +127,7 @@ func New() *redant.Command {
 				AgentName:             agentName,
 				CustomToolsJSON:       customToolsJSON,
 				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableSkillsTool:      enableSkillsTool,
 				EnableInfiniteSession: enableInfiniteSession,
 			})
 			if err != nil {
@@ -216,6 +220,7 @@ func New() *redant.Command {
 				AgentName:             agentName,
 				CustomToolsJSON:       customToolsJSON,
 				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableSkillsTool:      enableSkillsTool,
 				EnableInfiniteSession: enableInfiniteSession,
 			})
 			if err != nil {
@@ -372,6 +377,7 @@ func New() *redant.Command {
 				AgentName:             agentName,
 				CustomToolsJSON:       customToolsJSON,
 				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableSkillsTool:      enableSkillsTool,
 				EnableInfiniteSession: enableInfiniteSession,
 			})
 			if err != nil {
@@ -427,6 +433,7 @@ func New() *redant.Command {
 				AgentName:             agentName,
 				CustomToolsJSON:       customToolsJSON,
 				EnableDemoEchoTool:    enableDemoEchoTool,
+				EnableSkillsTool:      enableSkillsTool,
 				EnableInfiniteSession: enableInfiniteSession,
 			})
 			if err != nil {
@@ -506,6 +513,7 @@ type advancedConfigInput struct {
 	AgentName             string
 	CustomToolsJSON       string
 	EnableDemoEchoTool    bool
+	EnableSkillsTool      bool
 	EnableInfiniteSession bool
 }
 
@@ -540,6 +548,7 @@ type copilotProfile struct {
 	AgentName             string   `json:"agent"`
 	CustomToolsJSON       string   `json:"customToolsJSON"`
 	EnableDemoEchoTool    *bool    `json:"enableDemoEchoTool"`
+	EnableSkillsTool      *bool    `json:"enableSkillsTool"`
 	EnableInfiniteSession *bool    `json:"enableInfiniteSession"`
 }
 
@@ -567,6 +576,7 @@ type resolveCopilotInput struct {
 	AgentName             string
 	CustomToolsJSON       string
 	EnableDemoEchoTool    bool
+	EnableSkillsTool      bool
 	EnableInfiniteSession bool
 }
 
@@ -581,6 +591,7 @@ type resolvedCopilotOptions struct {
 	CustomAgentsJSON      string
 	MCPServersJSON        string
 	EnableDemoEchoTool    bool
+	EnableSkillsTool      bool
 	EnableInfiniteSession bool
 	Advanced              *advancedConfig
 }
@@ -645,6 +656,9 @@ func resolveCopilotOptions(in resolveCopilotInput) (*resolvedCopilotOptions, err
 		if !in.EnableDemoEchoTool && pf.EnableDemoEchoTool != nil {
 			in.EnableDemoEchoTool = *pf.EnableDemoEchoTool
 		}
+		if !in.EnableSkillsTool && pf.EnableSkillsTool != nil {
+			in.EnableSkillsTool = *pf.EnableSkillsTool
+		}
 		if in.EnableInfiniteSession && pf.EnableInfiniteSession != nil {
 			in.EnableInfiniteSession = *pf.EnableInfiniteSession
 		}
@@ -663,6 +677,7 @@ func resolveCopilotOptions(in resolveCopilotInput) (*resolvedCopilotOptions, err
 		AgentName:             in.AgentName,
 		CustomToolsJSON:       in.CustomToolsJSON,
 		EnableDemoEchoTool:    in.EnableDemoEchoTool,
+		EnableSkillsTool:      in.EnableSkillsTool,
 		EnableInfiniteSession: in.EnableInfiniteSession,
 	})
 	if err != nil {
@@ -680,6 +695,7 @@ func resolveCopilotOptions(in resolveCopilotInput) (*resolvedCopilotOptions, err
 		CustomAgentsJSON:      strings.TrimSpace(in.CustomAgentsJSON),
 		MCPServersJSON:        strings.TrimSpace(in.MCPServersJSON),
 		EnableDemoEchoTool:    in.EnableDemoEchoTool,
+		EnableSkillsTool:      in.EnableSkillsTool,
 		EnableInfiniteSession: in.EnableInfiniteSession,
 		Advanced:              adv,
 	}, nil
@@ -740,6 +756,9 @@ func buildAdvancedConfig(in advancedConfigInput) (*advancedConfig, error) {
 	}
 	if in.EnableDemoEchoTool {
 		tools = append(tools, buildDemoEchoTool())
+	}
+	if in.EnableSkillsTool {
+		tools = append(tools, buildSkillsTool(in.SkillDirs))
 	}
 
 	cfg := &advancedConfig{
@@ -900,6 +919,119 @@ func buildDemoEchoTool() copilot.Tool {
 			return copilot.ToolResult{TextResultForLLM: text, ResultType: "success", SessionLog: "demo_echo executed"}, nil
 		},
 	}
+}
+
+func buildSkillsTool(skillDirs []string) copilot.Tool {
+	defaultDirs := compactStringSlice(skillDirs)
+	return copilot.Tool{
+		Name:           "skills_tool",
+		Description:    "Manage local skills: list/get/query",
+		SkipPermission: true,
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"action": map[string]any{"type": "string", "enum": []string{"list", "get", "query"}, "description": "tool action"},
+				"name":   map[string]any{"type": "string", "description": "skill name for get/query"},
+				"h2":     map[string]any{"type": "string", "description": "h2 title for query"},
+				"h3":     map[string]any{"type": "string", "description": "h3 title for query"},
+				"dirs": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "override skill dirs",
+				},
+			},
+			"required": []string{"action"},
+		},
+		Handler: func(invocation copilot.ToolInvocation) (copilot.ToolResult, error) {
+			svc := skillsmodule.NewLocalManager()
+			action := ""
+			name := ""
+			h2 := ""
+			h3 := ""
+			dirs := append([]string(nil), defaultDirs...)
+
+			if m, ok := invocation.Arguments.(map[string]any); ok {
+				action = strings.ToLower(strings.TrimSpace(fmt.Sprint(m["action"])))
+				name = strings.TrimSpace(fmt.Sprint(m["name"]))
+				h2 = strings.TrimSpace(fmt.Sprint(m["h2"]))
+				h3 = strings.TrimSpace(fmt.Sprint(m["h3"]))
+				if rawDirs, ok := m["dirs"].([]any); ok && len(rawDirs) > 0 {
+					override := make([]string, 0, len(rawDirs))
+					for _, d := range rawDirs {
+						override = append(override, strings.TrimSpace(fmt.Sprint(d)))
+					}
+					dirs = svc.CompactStringSlice(override)
+				}
+			}
+
+			if len(dirs) == 0 {
+				dirs = svc.ExistingDirs([]string{"./skills", "./.copilot/skills"})
+			}
+
+			entries, warns := svc.Discover(dirs)
+			response := map[string]any{"action": action, "dirs": dirs, "warnings": warns}
+
+			switch action {
+			case "list":
+				response["skills"] = entries
+			case "get":
+				if name == "" {
+					return errorToolResult("skills_tool get requires name"), nil
+				}
+				target, err := svc.FindByName(entries, name)
+				if err != nil {
+					return errorToolResult(err.Error()), nil
+				}
+				content, err := svc.ReadSkill(target.Path)
+				if err != nil {
+					return errorToolResult(err.Error()), nil
+				}
+				response["skill"] = target
+				response["content"] = content
+			case "query":
+				if name == "" || h2 == "" {
+					return errorToolResult("skills_tool query requires name and h2"), nil
+				}
+				target, err := svc.FindByName(entries, name)
+				if err != nil {
+					return errorToolResult(err.Error()), nil
+				}
+				content, err := svc.ReadSkill(target.Path)
+				if err != nil {
+					return errorToolResult(err.Error()), nil
+				}
+				parsed, err := svc.ParseContent(content, target.Name)
+				if err != nil {
+					return errorToolResult(err.Error()), nil
+				}
+				headings := []string{h2}
+				if strings.TrimSpace(h3) != "" {
+					headings = append(headings, h3)
+				}
+				sectionText, ok := svc.FindSectionContent(parsed.Sections, headings...)
+				response["skill"] = target
+				response["headings"] = headings
+				response["found"] = ok
+				response["sectionContent"] = sectionText
+			default:
+				return errorToolResult("unsupported action, use list|get|query"), nil
+			}
+
+			payload, err := json.Marshal(response)
+			if err != nil {
+				return errorToolResult(err.Error()), nil
+			}
+			return copilot.ToolResult{TextResultForLLM: string(payload), ResultType: "success", SessionLog: "skills_tool executed"}, nil
+		},
+	}
+}
+
+func errorToolResult(msg string) copilot.ToolResult {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		msg = "unknown error"
+	}
+	return copilot.ToolResult{TextResultForLLM: msg, ResultType: "error", SessionLog: "tool error: " + msg}
 }
 
 func compactStringSlice(in []string) []string {
