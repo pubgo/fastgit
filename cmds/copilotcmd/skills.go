@@ -11,6 +11,14 @@ import (
 )
 
 func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *redant.Command {
+	return newSkillsCmdWithService(profileName, profileFile, cliSkillDirs, skillsmodule.NewService())
+}
+
+func newSkillsCmdWithService(profileName, profileFile *string, cliSkillDirs *[]string, svc skillsmodule.Service) *redant.Command {
+	if svc == nil {
+		svc = skillsmodule.NewService()
+	}
+
 	var (
 		skillName string
 		skillDir  string
@@ -29,11 +37,11 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 		Metadata: agentlinemodule.AgentCommandMetadata(),
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			_ = ctx
-			dirs, err := resolveSkillDirs(*profileName, *profileFile, *cliSkillDirs)
+			dirs, err := resolveSkillDirsWithService(*profileName, *profileFile, *cliSkillDirs, svc)
 			if err != nil {
 				return err
 			}
-			entries, warns := skillsmodule.Discover(dirs)
+			entries, warns := svc.Discover(dirs)
 			if len(entries) == 0 {
 				_, _ = fmt.Fprintln(inv.Stdout, "未发现任何 skills")
 				for _, w := range warns {
@@ -65,16 +73,16 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			_ = ctx
-			dirs, err := resolveSkillDirs(*profileName, *profileFile, *cliSkillDirs)
+			dirs, err := resolveSkillDirsWithService(*profileName, *profileFile, *cliSkillDirs, svc)
 			if err != nil {
 				return err
 			}
-			entries, _ := skillsmodule.Discover(dirs)
-			target, err := skillsmodule.FindByName(entries, skillName)
+			entries, _ := svc.Discover(dirs)
+			target, err := svc.FindByName(entries, skillName)
 			if err != nil {
 				return err
 			}
-			content, err := skillsmodule.ReadSkill(target.Path)
+			content, err := svc.ReadSkill(target.Path)
 			if err != nil {
 				return err
 			}
@@ -94,11 +102,11 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			_ = ctx
-			name := skillsmodule.SanitizeName(skillName)
+			name := svc.SanitizeName(skillName)
 			if name == "" {
 				return fmt.Errorf("invalid --name")
 			}
-			entry, err := skillsmodule.CreateSkill(skillsmodule.CreateInput{
+			entry, err := svc.CreateSkill(skillsmodule.CreateInput{
 				Name:    name,
 				BaseDir: strings.TrimSpace(skillDir),
 				Force:   force,
@@ -117,7 +125,7 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 		Metadata: agentlinemodule.AgentCommandMetadata(),
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			_ = ctx
-			dirs, err := resolveSkillDirs(*profileName, *profileFile, *cliSkillDirs)
+			dirs, err := resolveSkillDirsWithService(*profileName, *profileFile, *cliSkillDirs, svc)
 			if err != nil {
 				return err
 			}
@@ -125,7 +133,7 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 			for _, d := range dirs {
 				_, _ = fmt.Fprintf(inv.Stdout, "- %s\n", d)
 			}
-			entries, warns := skillsmodule.Discover(dirs)
+			entries, warns := svc.Discover(dirs)
 			_, _ = fmt.Fprintf(inv.Stdout, "discovered skills: %d\n", len(entries))
 			for _, s := range entries {
 				_, _ = fmt.Fprintf(inv.Stdout, "- %s\n", s.Name)
@@ -142,6 +150,14 @@ func newSkillsCmd(profileName, profileFile *string, cliSkillDirs *[]string) *red
 }
 
 func resolveSkillDirs(profileName, profileFile string, cliSkillDirs []string) ([]string, error) {
+	return resolveSkillDirsWithService(profileName, profileFile, cliSkillDirs, skillsmodule.NewService())
+}
+
+func resolveSkillDirsWithService(profileName, profileFile string, cliSkillDirs []string, svc skillsmodule.Service) ([]string, error) {
+	if svc == nil {
+		svc = skillsmodule.NewService()
+	}
+
 	resolved, err := resolveCopilotOptions(resolveCopilotInput{
 		ProfileName:           strings.TrimSpace(profileName),
 		ProfileFile:           strings.TrimSpace(profileFile),
@@ -153,11 +169,11 @@ func resolveSkillDirs(profileName, profileFile string, cliSkillDirs []string) ([
 		return nil, err
 	}
 
-	dirs := skillsmodule.CompactStringSlice(resolved.Advanced.SkillDirectories)
+	dirs := svc.CompactStringSlice(resolved.Advanced.SkillDirectories)
 	if len(dirs) > 0 {
 		return dirs, nil
 	}
 
-	fallback := skillsmodule.ExistingDirs([]string{"./skills", "./.copilot/skills"})
-	return skillsmodule.CompactStringSlice(fallback), nil
+	fallback := svc.ExistingDirs([]string{"./skills", "./.copilot/skills"})
+	return svc.CompactStringSlice(fallback), nil
 }

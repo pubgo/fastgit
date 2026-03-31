@@ -11,11 +11,27 @@ import (
 )
 
 type Entry struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	Dir         string `json:"dir"`
-	Description string `json:"description,omitempty"`
-	Source      string `json:"source,omitempty"`
+	Name        string         `json:"name"`
+	Path        string         `json:"path"`
+	Dir         string         `json:"dir"`
+	Description string         `json:"description,omitempty"`
+	Title       string         `json:"title,omitempty"`
+	H2          []string       `json:"h2,omitempty"`
+	H3          []string       `json:"h3,omitempty"`
+	Sections    []Section      `json:"sections,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	Source      string         `json:"source,omitempty"`
+}
+
+type Section struct {
+	Title       string       `json:"title"`
+	Content     string       `json:"content,omitempty"`
+	Subsections []Subsection `json:"subsections,omitempty"`
+}
+
+type Subsection struct {
+	Title   string `json:"title"`
+	Content string `json:"content,omitempty"`
 }
 
 type CreateInput struct {
@@ -32,9 +48,14 @@ type frontmatter struct {
 	Description string `yaml:"description"`
 }
 
-type parsedSkill struct {
+type ParsedSkill struct {
 	Name        string
 	Description string
+	Title       string
+	H2          []string
+	H3          []string
+	Sections    []Section
+	Metadata    map[string]any
 	Source      string
 }
 
@@ -90,6 +111,11 @@ func Discover(skillDirs []string) ([]Entry, []string) {
 				Path:        skillPath,
 				Dir:         skillDir,
 				Description: parsed.Description,
+				Title:       parsed.Title,
+				H2:          parsed.H2,
+				H3:          parsed.H3,
+				Sections:    parsed.Sections,
+				Metadata:    parsed.Metadata,
 				Source:      parsed.Source,
 			})
 		}
@@ -228,35 +254,40 @@ description: "Use when: 描述这个 skill 适用场景（关键词越具体越�
 `, name, name)
 }
 
-func ParseFile(path string, fallbackName string) (parsedSkill, error) {
+func ParseFile(path string, fallbackName string) (ParsedSkill, error) {
 	content, err := ReadSkill(path)
 	if err != nil {
-		return parsedSkill{}, err
+		return ParsedSkill{}, err
 	}
 	return ParseContent(content, fallbackName)
 }
 
-func ParseContent(content, fallbackName string) (parsedSkill, error) {
+func ParseContent(content, fallbackName string) (ParsedSkill, error) {
 	fallbackName = SanitizeName(fallbackName)
 	if fallbackName == "" {
 		fallbackName = "skill"
 	}
 
-	result := parsedSkill{Name: fallbackName, Source: "directory"}
+	result := ParsedSkill{Name: fallbackName, Source: "directory", Metadata: map[string]any{}}
 	body := strings.TrimSpace(content)
 	if body == "" {
 		return result, nil
 	}
 
-	fm, rest, hasFM, err := splitFrontmatter(body)
+	fm, fmRaw, rest, hasFM, err := splitFrontmatter(body)
 	if err != nil {
-		return parsedSkill{}, err
+		return ParsedSkill{}, err
 	}
 	if hasFM {
+		meta, err := parseFrontmatterMap(fmRaw)
+		if err != nil {
+			return ParsedSkill{}, err
+		}
+		result.Metadata = meta
 		if strings.TrimSpace(fm.Name) != "" {
 			n := SanitizeName(fm.Name)
 			if n == "" {
-				return parsedSkill{}, fmt.Errorf("invalid frontmatter name: %q", fm.Name)
+				return ParsedSkill{}, fmt.Errorf("invalid frontmatter name: %q", fm.Name)
 			}
 			result.Name = n
 			result.Source = "frontmatter.name"
@@ -267,25 +298,29 @@ func ParseContent(content, fallbackName string) (parsedSkill, error) {
 		body = rest
 	}
 
-	heading := extractTopHeading(body)
-	if heading != "" {
-		h := SanitizeName(heading)
+	title, h2, h3, sections := extractHeadings(body)
+	if title != "" {
+		result.Title = title
+		h := SanitizeName(title)
 		if h != "" && result.Source == "directory" {
 			result.Name = h
 			result.Source = "heading"
 		}
 	}
+	result.H2 = h2
+	result.H3 = h3
+	result.Sections = sections
 
 	return result, nil
 }
 
-func splitFrontmatter(content string) (frontmatter, string, bool, error) {
+func splitFrontmatter(content string) (frontmatter, string, string, bool, error) {
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 {
-		return frontmatter{}, content, false, nil
+		return frontmatter{}, "", content, false, nil
 	}
 	if strings.TrimSpace(lines[0]) != "---" {
-		return frontmatter{}, content, false, nil
+		return frontmatter{}, "", content, false, nil
 	}
 
 	end := -1
@@ -296,38 +331,141 @@ func splitFrontmatter(content string) (frontmatter, string, bool, error) {
 		}
 	}
 	if end == -1 {
-		return frontmatter{}, "", true, fmt.Errorf("frontmatter start found but closing --- missing")
+		return frontmatter{}, "", "", true, fmt.Errorf("frontmatter start found but closing --- missing")
 	}
 
 	raw := strings.Join(lines[1:end], "\n")
 	var fm frontmatter
 	if strings.TrimSpace(raw) != "" {
 		if err := yaml.Unmarshal([]byte(raw), &fm); err != nil {
-			return frontmatter{}, "", true, fmt.Errorf("invalid frontmatter yaml: %w", err)
+			return frontmatter{}, raw, "", true, fmt.Errorf("invalid frontmatter yaml: %w", err)
 		}
 	}
 	rest := strings.Join(lines[end+1:], "\n")
-	return fm, strings.TrimSpace(rest), true, nil
+	return fm, raw, strings.TrimSpace(rest), true, nil
 }
 
-func extractTopHeading(content string) string {
+func extractHeadings(content string) (title string, h2 []string, h3 []string, sections []Section) {
+	h2 = make([]string, 0)
+	h3 = make([]string, 0)
+	sections = make([]Section, 0)
+
+	currentH2 := -1
+	currentH3 := -1
+
+	appendContent := func(line string) {
+		if currentH2 < 0 {
+			return
+		}
+		if currentH3 >= 0 {
+			if sections[currentH2].Subsections[currentH3].Content == "" {
+				sections[currentH2].Subsections[currentH3].Content = line
+			} else {
+				sections[currentH2].Subsections[currentH3].Content += "\n" + line
+			}
+			return
+		}
+		if sections[currentH2].Content == "" {
+			sections[currentH2].Content = line
+		} else {
+			sections[currentH2].Content += "\n" + line
+		}
+	}
+
 	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
+		raw := line
+		line = strings.TrimSpace(raw)
 		if line == "" {
+			appendContent("")
 			continue
 		}
 		if strings.HasPrefix(line, "# ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if title == "" {
+				title = strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			}
+			continue
 		}
-		if strings.HasPrefix(line, "##") {
-			return ""
+		if strings.HasPrefix(line, "### ") {
+			label := strings.TrimSpace(strings.TrimPrefix(line, "### "))
+			if label != "" {
+				if currentH2 < 0 {
+					sections = append(sections, Section{Title: "ungrouped"})
+					h2 = append(h2, "ungrouped")
+					currentH2 = len(sections) - 1
+				}
+				sections[currentH2].Subsections = append(sections[currentH2].Subsections, Subsection{Title: label})
+				currentH3 = len(sections[currentH2].Subsections) - 1
+				h3 = append(h3, label)
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "## ") {
+			label := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+			if label != "" {
+				sections = append(sections, Section{Title: label})
+				currentH2 = len(sections) - 1
+				currentH3 = -1
+				h2 = append(h2, label)
+			}
+			continue
 		}
 		if strings.HasPrefix(line, "---") {
 			continue
 		}
-		return ""
+		appendContent(raw)
 	}
-	return ""
+
+	for i := range sections {
+		sections[i].Content = strings.TrimSpace(sections[i].Content)
+		for j := range sections[i].Subsections {
+			sections[i].Subsections[j].Content = strings.TrimSpace(sections[i].Subsections[j].Content)
+		}
+	}
+
+	return title, h2, h3, sections
+}
+
+func FindSectionContent(sections []Section, headings ...string) (string, bool) {
+	if len(headings) == 0 {
+		return "", false
+	}
+	h2Key := strings.TrimSpace(headings[0])
+	if h2Key == "" {
+		return "", false
+	}
+
+	for _, sec := range sections {
+		if !strings.EqualFold(strings.TrimSpace(sec.Title), h2Key) {
+			continue
+		}
+		if len(headings) == 1 {
+			return sec.Content, true
+		}
+		h3Key := strings.TrimSpace(headings[1])
+		for _, sub := range sec.Subsections {
+			if strings.EqualFold(strings.TrimSpace(sub.Title), h3Key) {
+				return sub.Content, true
+			}
+		}
+		return "", false
+	}
+
+	return "", false
+}
+
+func parseFrontmatterMap(raw string) (map[string]any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}, nil
+	}
+	var meta map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &meta); err != nil {
+		return nil, fmt.Errorf("invalid frontmatter yaml: %w", err)
+	}
+	if meta == nil {
+		return map[string]any{}, nil
+	}
+	return meta, nil
 }
 
 func CompactStringSlice(in []string) []string {
