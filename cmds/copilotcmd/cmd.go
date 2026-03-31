@@ -923,9 +923,10 @@ func buildDemoEchoTool() copilot.Tool {
 
 func buildSkillsTool(skillDirs []string) copilot.Tool {
 	defaultDirs := compactStringSlice(skillDirs)
+	const schemaVersion = "skills_tool/v1"
 	return copilot.Tool{
 		Name:           "skills_tool",
-		Description:    "Manage local skills: list/get/query",
+		Description:    "Manage local skills with stable descriptor output: list/get/query",
 		SkipPermission: true,
 		Parameters: map[string]any{
 			"type": "object",
@@ -969,11 +970,16 @@ func buildSkillsTool(skillDirs []string) copilot.Tool {
 			}
 
 			entries, warns := svc.Discover(dirs)
-			response := map[string]any{"action": action, "dirs": dirs, "warnings": warns}
+			response := map[string]any{"schemaVersion": schemaVersion, "action": action, "dirs": dirs, "warnings": warns}
 
 			switch action {
 			case "list":
-				response["skills"] = entries
+				descriptors := make([]map[string]any, 0, len(entries))
+				for _, entry := range entries {
+					descriptors = append(descriptors, buildSkillDescriptor(entry, false))
+				}
+				response["skills"] = descriptors
+				response["skillsLegacy"] = entries
 			case "get":
 				if name == "" {
 					return errorToolResult("skills_tool get requires name"), nil
@@ -986,7 +992,8 @@ func buildSkillsTool(skillDirs []string) copilot.Tool {
 				if err != nil {
 					return errorToolResult(err.Error()), nil
 				}
-				response["skill"] = target
+				response["skill"] = buildSkillDescriptor(target, true)
+				response["skillLegacy"] = target
 				response["content"] = content
 			case "query":
 				if name == "" || h2 == "" {
@@ -1009,7 +1016,8 @@ func buildSkillsTool(skillDirs []string) copilot.Tool {
 					headings = append(headings, h3)
 				}
 				sectionText, ok := svc.FindSectionContent(parsed.Sections, headings...)
-				response["skill"] = target
+				response["skill"] = buildSkillDescriptor(target, true)
+				response["skillLegacy"] = target
 				response["headings"] = headings
 				response["found"] = ok
 				response["sectionContent"] = sectionText
@@ -1024,6 +1032,55 @@ func buildSkillsTool(skillDirs []string) copilot.Tool {
 			return copilot.ToolResult{TextResultForLLM: string(payload), ResultType: "success", SessionLog: "skills_tool executed"}, nil
 		},
 	}
+}
+
+func buildSkillDescriptor(entry skillsmodule.Entry, includeSections bool) map[string]any {
+	kind := strings.TrimSpace(entry.Kind)
+	if kind == "" {
+		kind = "local"
+	}
+	slug := strings.TrimSpace(entry.Slug)
+	if slug == "" {
+		slug = strings.TrimSpace(entry.Name)
+	}
+	displayName := strings.TrimSpace(entry.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(entry.Title)
+	}
+	if displayName == "" {
+		displayName = strings.TrimSpace(entry.Name)
+	}
+	summary := strings.TrimSpace(entry.Summary)
+	if summary == "" {
+		summary = strings.TrimSpace(entry.Description)
+	}
+
+	d := map[string]any{
+		"id":          strings.TrimSpace(entry.ID),
+		"kind":        kind,
+		"namespace":   strings.TrimSpace(entry.Namespace),
+		"name":        strings.TrimSpace(entry.Name),
+		"slug":        slug,
+		"displayName": displayName,
+		"summary":     summary,
+		"description": strings.TrimSpace(entry.Description),
+		"version":     strings.TrimSpace(entry.Version),
+		"tags":        entry.Tags,
+		"useWhen":     entry.UseWhen,
+		"tools":       entry.Tools,
+		"path":        strings.TrimSpace(entry.Path),
+		"dir":         strings.TrimSpace(entry.Dir),
+		"source":      strings.TrimSpace(entry.Source),
+		"headings": map[string]any{
+			"h2": entry.H2,
+			"h3": entry.H3,
+		},
+		"metadata": entry.Metadata,
+	}
+	if includeSections {
+		d["sections"] = entry.Sections
+	}
+	return d
 }
 
 func errorToolResult(msg string) copilot.ToolResult {

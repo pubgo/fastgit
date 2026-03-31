@@ -309,3 +309,68 @@ available_tools: ["skills_tool", "grep"]
 		t.Fatalf("unexpected tools: %#v", parsed.Tools)
 	}
 }
+
+func TestParseContent_NestedMetadataFields(t *testing.T) {
+	content := `---
+name: nested-meta
+description: "Use when: parse metadata nested fields"
+metadata:
+  summary: "nested summary"
+  version: "2.0.0"
+  tags: ["nested", "meta"]
+  use_when: ["need nested support"]
+  tools: ["skills_tool"]
+---
+
+# Nested Meta
+`
+
+	parsed, err := ParseContent(content, "fallback")
+	if err != nil {
+		t.Fatalf("ParseContent returned error: %v", err)
+	}
+	if parsed.Summary != "nested summary" {
+		t.Fatalf("expected nested summary, got %s", parsed.Summary)
+	}
+	if parsed.Version != "2.0.0" {
+		t.Fatalf("expected nested version, got %s", parsed.Version)
+	}
+	if len(parsed.Tags) != 2 || parsed.Tags[0] != "nested" {
+		t.Fatalf("unexpected tags: %#v", parsed.Tags)
+	}
+	if len(parsed.UseWhen) != 1 || parsed.UseWhen[0] != "need nested support" {
+		t.Fatalf("unexpected use_when: %#v", parsed.UseWhen)
+	}
+	if len(parsed.Tools) != 1 || parsed.Tools[0] != "skills_tool" {
+		t.Fatalf("unexpected tools: %#v", parsed.Tools)
+	}
+}
+
+func TestBuildTemplate_CompatibleSchemaAndParseable(t *testing.T) {
+	tpl := BuildTemplate("Repo Context")
+	if !strings.Contains(tpl, "argument-hint:") {
+		t.Fatalf("expected argument-hint in template")
+	}
+	if !strings.Contains(tpl, "metadata:") {
+		t.Fatalf("expected metadata block in template")
+	}
+	parts := strings.Split(tpl, "---")
+	if len(parts) < 3 {
+		t.Fatalf("expected template with frontmatter separators")
+	}
+	frontmatter := parts[1]
+	if strings.Contains(frontmatter, "\t") {
+		t.Fatalf("frontmatter should not contain tabs in YAML indentation")
+	}
+
+	parsed, err := ParseContent(tpl, "fallback")
+	if err != nil {
+		t.Fatalf("template should be parseable, got error: %v", err)
+	}
+	if parsed.Name != "repo-context" {
+		t.Fatalf("expected parsed name repo-context, got %s", parsed.Name)
+	}
+	if parsed.Summary == "" {
+		t.Fatalf("expected parsed summary from metadata")
+	}
+}

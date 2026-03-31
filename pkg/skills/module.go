@@ -268,30 +268,39 @@ func SanitizeName(name string) string {
 
 func BuildTemplate(name string) string {
 	name = SanitizeName(name)
-	return fmt.Sprintf(`---
-name: %s
-summary: "%s 技能摘要"
-description: "Use when: 描述这个 skill 适用场景（关键词越具体越好）"
-version: "0.1.0"
-tags: ["repo", "workflow"]
-use_when: ["当你需要处理该类任务时"]
-tools: ["skills_tool"]
----
-
-# %s
-
-## 用途
-- 简要描述这个 skill 负责的任务。
-
-## 行为约束
-- 不要臆造事实。
-- 信息不足时先说明缺失上下文。
-
-## 建议流程
-1. 理解问题与边界。
-2. 检索并确认相关文件。
-3. 给出最小可执行方案。
-`, name, name, name)
+	lines := []string{
+		"---",
+		"name: " + name,
+		"description: \"Use when: 描述这个 skill 适用场景（关键词越具体越好）\"",
+		"argument-hint: \"输入任务目标、约束和涉及模块\"",
+		"metadata:",
+		"  summary: \"" + name + " 技能摘要\"",
+		"  version: \"0.1.0\"",
+		"  tags: [\"repo\", \"workflow\"]",
+		"  use_when: [\"当你需要处理该类任务时\"]",
+		"  tools: [\"skills_tool\"]",
+		"---",
+		"",
+		"# " + name,
+		"",
+		"## 目标",
+		"- 简要描述这个 skill 的结果目标。",
+		"",
+		"## 执行步骤",
+		"1. 理解问题与边界。",
+		"2. 检索并确认相关文件。",
+		"3. 给出最小可执行方案并验证。",
+		"",
+		"## 约束",
+		"- 不要臆造事实。",
+		"- 信息不足时先说明缺失上下文。",
+		"",
+		"## 输出契约",
+		"- 变更摘要（文件 + 目的）",
+		"- 验证结果（测试/检查）",
+		"- 已知风险与后续动作",
+	}
+	return strings.Join(lines, "\n")
 }
 
 func ParseFile(path string, fallbackName string) (ParsedSkill, error) {
@@ -535,17 +544,17 @@ func extractSkillSpec(meta map[string]any) skillSpec {
 		return skillSpec{}
 	}
 	return skillSpec{
-		Summary: firstString(meta, "summary", "brief", "abstract"),
-		Version: firstString(meta, "version", "skill_version"),
-		Tags:    firstStringSlice(meta, "tags", "keywords"),
-		UseWhen: firstStringSlice(meta, "use_when", "useWhen", "when"),
-		Tools:   firstStringSlice(meta, "tools", "available_tools", "tool_allowlist"),
+		Summary: firstString(meta, "summary", "brief", "abstract", "metadata.summary", "metadata.brief", "metadata.abstract"),
+		Version: firstString(meta, "version", "skill_version", "metadata.version", "metadata.skill_version"),
+		Tags:    firstStringSlice(meta, "tags", "keywords", "metadata.tags", "metadata.keywords"),
+		UseWhen: firstStringSlice(meta, "use_when", "useWhen", "when", "metadata.use_when", "metadata.useWhen", "metadata.when"),
+		Tools:   firstStringSlice(meta, "tools", "available_tools", "tool_allowlist", "metadata.tools", "metadata.available_tools", "metadata.tool_allowlist"),
 	}
 }
 
 func firstString(meta map[string]any, keys ...string) string {
 	for _, k := range keys {
-		if v, ok := meta[k]; ok {
+		if v, ok := lookupMeta(meta, k); ok {
 			s := strings.TrimSpace(fmt.Sprint(v))
 			if s != "" && s != "<nil>" {
 				return s
@@ -557,7 +566,7 @@ func firstString(meta map[string]any, keys ...string) string {
 
 func firstStringSlice(meta map[string]any, keys ...string) []string {
 	for _, k := range keys {
-		if v, ok := meta[k]; ok {
+		if v, ok := lookupMeta(meta, k); ok {
 			items := toStringSlice(v)
 			if len(items) > 0 {
 				return items
@@ -593,6 +602,37 @@ func toStringSlice(v any) []string {
 		}
 		return []string{s}
 	}
+}
+
+func lookupMeta(meta map[string]any, key string) (any, bool) {
+	if meta == nil {
+		return nil, false
+	}
+	if !strings.Contains(key, ".") {
+		v, ok := meta[key]
+		return v, ok
+	}
+	parts := strings.Split(key, ".")
+	current := any(meta)
+	for _, p := range parts {
+		switch node := current.(type) {
+		case map[string]any:
+			v, ok := node[p]
+			if !ok {
+				return nil, false
+			}
+			current = v
+		case map[any]any:
+			v, ok := node[p]
+			if !ok {
+				return nil, false
+			}
+			current = v
+		default:
+			return nil, false
+		}
+	}
+	return current, true
 }
 
 func buildSkillID(namespace, name string) string {
