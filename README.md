@@ -4,6 +4,8 @@ agentic git commit generate tool
 ## Command Overview
 - `fastgit commit`: AI 提交流程（保留原行为）
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
+- `fastgit pull`: 拉取当前分支（支持 `--all`）
+- `fastgit push`: 推送当前分支（支持 `--all` / `--force`）
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
 - `fastgit ggc <command ...>`: 执行统一命令，例如 `fastgit ggc status short`
 - `fastgit ggc` / `fastgit ggc interactive`: 进入交互模式（增量搜索 + workflow）

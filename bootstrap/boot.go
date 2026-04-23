@@ -18,6 +18,7 @@ import (
 	"github.com/pubgo/fastgit/cmds/historycmd"
 	"github.com/pubgo/fastgit/cmds/initcmd"
 	"github.com/pubgo/fastgit/cmds/pullcmd"
+	"github.com/pubgo/fastgit/cmds/pushcmd"
 	"github.com/pubgo/fastgit/cmds/sshcmd"
 	"github.com/pubgo/fastgit/cmds/tagcmd"
 	"github.com/pubgo/fastgit/cmds/upgradecmd"
@@ -44,6 +45,7 @@ func Main() {
 		fastcommitcmd.New(),
 		configcmd.New(),
 		pullcmd.New(),
+		pushcmd.New(),
 		chglogcmd.NewCommand(),
 		copilotcmd.New(),
 	)
