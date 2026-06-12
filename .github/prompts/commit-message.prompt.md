@@ -39,16 +39,16 @@ agent: agent
 处理规则：
 
 - 如果 **有 staged diff**：
-   - 仅基于 staged diff 生成 commit message；
-   - 仅提交 staged 内容；
-   - 不要自动把 unstaged 改动加入提交。
+  - 仅基于 staged diff 生成 commit message；
+  - 仅提交 staged 内容；
+  - 不要自动把 unstaged 改动加入提交。
 - 如果 **没有 staged diff，但有 unstaged diff**：
-   - 基于 working tree 改动生成 commit message；
-   - 自动执行 `git add -A` 将当前改动加入暂存区；
-   - 再执行本地提交。
+  - 基于 working tree 改动生成 commit message；
+  - 自动执行 `git add -A` 将当前改动加入暂存区；
+  - 再执行本地提交。
 - 如果 staged / unstaged 都为空：
-   - 明确提示当前没有可用于生成提交信息的代码改动。
-   - 此时不要杜撰任何 commit message，也不要执行提交。
+  - 明确提示当前没有可用于生成提交信息的代码改动。
+  - 此时不要杜撰任何 commit message，也不要执行提交。
 
 ## 执行规则
 
@@ -67,9 +67,9 @@ agent: agent
 生成提交信息时，按以下优先级判断：
 
 1. **用户可见新能力** 优先于内部重构细节。
-   - 例如：新增命令、子命令、交互入口、脚手架、repo prompt、工作流能力，优先考虑 `feat`。
+  - 例如：新增命令、子命令、交互入口、脚手架、repo prompt、工作流能力，优先考虑 `feat`。
 2. **真实行为修复** 优先于实现细节调整。
-   - 例如：修复发布流程、修复输出错误、修复空发布，优先考虑 `fix`。
+  - 例如：修复发布流程、修复输出错误、修复空发布，优先考虑 `fix`。
 3. **纯结构调整且无新增用户能力** 才优先考虑 `refactor`。
 4. **纯文档更新** 才优先考虑 `docs`。
 
@@ -79,18 +79,18 @@ agent: agent
 
 1. 只基于可见改动生成提交信息，不杜撰。
 2. 使用 **Conventional Commits** 规范：
-   - `feat`
-   - `fix`
-   - `docs`
-   - `refactor`
-   - `test`
-   - `chore`
-   - `perf`
-   - `build`
-   - `ci`
+  - `feat`
+  - `fix`
+  - `docs`
+  - `refactor`
+  - `test`
+  - `chore`
+  - `perf`
+  - `build`
+  - `ci`
 3. 标题格式：
-   - `<type>(<scope>): <summary>`
-   - 如果 scope 不明确，可省略 scope，使用 `<type>: <summary>`。
+  - `<type>(<scope>): <summary>`
+  - 如果 scope 不明确，可省略 scope，使用 `<type>: <summary>`。
 4. `summary` 使用英文，简洁明确，尽量不超过 50 个字符。
 5. 优先描述本次改动的**核心行为变化**，不要机械罗列所有文件。
 6. 如果主要是新增能力，优先用 `feat`。
@@ -132,11 +132,11 @@ agent: agent
 1. 只输出最终结果，不要展示分析过程。
 2. 不要加标题，不要加 Markdown 段落说明，不要加“已完成 X 个步骤”。
 3. 顶层字段固定使用：
-   - `mode:`
-   - `commit:`
-   - `hash:`
-   - `push:`
-   - `reason:`
+  - `mode:`
+  - `commit:`
+  - `hash:`
+  - `push:`
+  - `reason:`
 4. `commit:` 必须是**单行** commit message。
 5. `hash:` 必须来自真实 `git commit` 结果。
 6. `push:` 必须来自真实 `git push` 结果摘要。
