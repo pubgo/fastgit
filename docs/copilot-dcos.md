@@ -52,6 +52,16 @@
    - `fastgit copilot`
    - 在交互中执行：`/chat --prompt "帮我总结当前仓库"`
 
+4. Repo Prompt 模板初始化
+   - changelog：`fastgit changelog init`
+   - documentation：`fastgit docs init`
+   - 初始化后，可在仓库内直接复用 `.github/prompts/*.prompt.md` 与 `.github/instructions/*.instructions.md`
+   - `fastgit docs init` 当前会生成：
+     - `.github/prompts/documentation.prompt.md`
+     - `.github/prompts/commit-message.prompt.md`
+     - `.github/instructions/documentation.instructions.md`
+   - 适合沉淀 changelog、文档维护、提交信息等高频工作流
+
 ## S - Scale（扩展）
 
 1. 分层重构
@@ -62,3 +72,18 @@
    - 集成测试：`chat -> resume -> sessions` 闭环。
 3. 安全与可观测
    - 权限审计日志、事件追踪 ID、错误分类与退出码。
+
+## Prompt Workflow 补充说明
+
+为降低重复提示词编写成本，仓库级模板采用“两层结构”：
+
+1. `prompt`：描述任务目标与执行步骤
+2. `instructions`：定义目标文件的写作约束与风格规则
+
+当前已落地的模板方向：
+
+- changelog 维护
+- documentation 文档维护
+- commit message / commit workflow（已随 documentation 模板一并初始化）
+
+这样可以把一次性聊天经验沉淀为 repo 内的长期工作流，而不是依赖个人记忆反复口述。
