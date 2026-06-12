@@ -4,6 +4,9 @@ agentic git commit generate tool
 ## Command Overview
 - `fastgit commit`: AI 提交流程（保留原行为）
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
+- `fastgit changelog init`: 初始化 `.version/changelog` 模板，适配任意项目仓库
+- `fastgit changelog draft`: 使用 Copilot 根据当前改动更新 `Unreleased.md`
+- `fastgit changelog release`: 将 `Unreleased.md` 落版为版本文件，并可同步推进 `.version/VERSION`
 - `fastgit pull`: 拉取当前分支（支持 `--all`）
 - `fastgit push`: 推送当前分支（支持 `--all` / `--force`）
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
