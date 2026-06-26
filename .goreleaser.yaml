@@ -1,7 +1,7 @@
 builds:
   - main: ./main.go
-    id: fastcommit
-    binary: fastcommit
+    id: fastgit
+    binary: fastgit
     skip: false
     env:
       - CGO_ENABLED=0
@@ -14,7 +14,7 @@ builds:
       - "linux_arm64"
     ldflags:
       - -X 'github.com/pubgo/funk/v2/buildinfo.version=v{{ .Version }}'
-      - -X 'github.com/pubgo/funk/v2/buildinfo.project=fastcommit'
+      - -X 'github.com/pubgo/funk/v2/buildinfo.project=fastgit'
       - -X 'github.com/pubgo/funk/v2/buildinfo.buildTime={{ .CommitDate }}'
       - -X 'github.com/pubgo/funk/v2/buildinfo.commitID={{ .ShortCommit }}'
     flags:
@@ -65,8 +65,8 @@ changelog:
 release:
   github:
     owner: pubgo
-    name: fastcommit
+    name: fastgit
   name_template: '{{ .ProjectName }} {{ .Tag }}'
   footer: |
     ## Installation
-    Download the latest release from the [GitHub Releases](https://github.com/pubgo/fastcommit/releases) page.
+    Download the latest release from the [GitHub Releases](https://github.com/pubgo/fastgit/releases) page.
