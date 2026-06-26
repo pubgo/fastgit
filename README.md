@@ -10,6 +10,10 @@ agentic git commit generate tool
 - `fastgit docs init`: 初始化文档维护用的 prompt / instruction 模板
 - `fastgit pull`: 拉取当前分支（支持 `--all`）
 - `fastgit push`: 推送当前分支（支持 `--all` / `--force`）
+- `fastgit worktree`: 列出当前仓库 worktree
+- `fastgit worktree create <issue|branch> [--base <branch>]`: 创建 worktree
+- `fastgit worktree remove <issue|branch>`: 删除 worktree
+- `fastgit worktree remove --path <worktree-path>`: 按路径删除 worktree
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
 - `fastgit ggc <command ...>`: 执行统一命令，例如 `fastgit ggc status short`
 - `fastgit ggc` / `fastgit ggc interactive`: 进入交互模式（增量搜索 + workflow）

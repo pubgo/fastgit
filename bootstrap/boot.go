@@ -24,6 +24,7 @@ import (
 	"github.com/pubgo/fastgit/cmds/tagcmd"
 	"github.com/pubgo/fastgit/cmds/upgradecmd"
 	"github.com/pubgo/fastgit/cmds/versioncmd"
+	"github.com/pubgo/fastgit/cmds/worktreecmd"
 	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/config"
@@ -48,6 +49,7 @@ func Main() {
 		docscmd.New(),
 		pullcmd.New(),
 		pushcmd.New(),
+		worktreecmd.New(),
 		chglogcmd.NewCommand(),
 		copilotcmd.New(),
 	)
