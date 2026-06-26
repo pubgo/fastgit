@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"sort"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,54 +75,59 @@ func New() *redant.Command {
 			params = dix.Inject(di, params)
 
 			utils.LogConfigAndBranch()
+			utils.Spin("fetch git tag: ", func() (r result.Result[any]) {
+				utils.GitFetchAll(ctx)
+				return
+			})
+
 			if flags.fastCommit {
 				tags := utils.GetAllGitTags(ctx)
+				sort.Slice(tags, func(i, j int) bool { return tags[i].GreaterThan(tags[j]) })
 
-				sort.Slice(tags, func(i, j int) bool { return tags[i].GreaterThanOrEqual(tags[j]) })
-				selectTags := lo.Map(tags, func(item *semver.Version, index int) tap.SelectOption[*semver.Version] {
+				selectTags := lo.Map(tags, func(item *semver.Version, _ int) tap.SelectOption[*semver.Version] {
 					return tap.SelectOption[*semver.Version]{
 						Value: item,
 						Label: item.Original(),
 					}
 				})
-				selectTags = lo.Chunk(selectTags, 10)[0]
-
-				tagResult := tap.Select[*semver.Version](ctx, tap.SelectOptions[*semver.Version]{
-					Message: "git tag(enter):",
-					Options: selectTags,
-				})
-
-				if tagResult == nil {
-					return nil
+				if len(selectTags) > 10 {
+					selectTags = selectTags[:10]
 				}
 
-				tagName := tap.Text(ctx, tap.TextOptions{
+				tagName := "v0.0.1"
+				if len(selectTags) > 0 {
+					tagResult := tap.Select[*semver.Version](ctx, tap.SelectOptions[*semver.Version]{
+						Message: "git tag(enter):",
+						Options: selectTags,
+					})
+					if tagResult == nil {
+						return nil
+					}
+					tagName = tagResult.Original()
+				}
+
+				tagName = tap.Text(ctx, tap.TextOptions{
 					Message:      "git tag(enter):",
-					InitialValue: tagResult.Original(),
-					DefaultValue: tagResult.Original(),
+					InitialValue: tagName,
+					DefaultValue: tagName,
 					Placeholder:  "enter git tag",
 					Validate: func(s string) error {
 						if !strings.HasPrefix(s, "v") {
 							return fmt.Errorf("tag name must start with v")
 						}
-
-						_, err := semver.NewSemver(s)
-						if err == nil {
-							return nil
+						if _, err := semver.NewSemver(s); err != nil {
+							return fmt.Errorf("tag is invalid, tag=%s err=%w", s, err)
 						}
-						return fmt.Errorf("tag is invalid, tag=%s err=%w", s, err)
+						return nil
 					},
 				})
-
 				if tagName == "" {
 					return fmt.Errorf("tag name is empty")
 				}
-
-				fmt.Println(utils.GitPushTag(ctx, tagName))
-				return nil
+				return validateAndPublishTag(ctx, tagName, ".version/VERSION", params.CommitCfg)
 			}
 
-			var p = tea.NewProgram(initialModel())
+			p := tea.NewProgram(initialModel())
 			m := assert.Must1(p.Run()).(model)
 			selected := strings.TrimSpace(m.selected)
 			if selected == "" {
@@ -131,26 +135,10 @@ func New() *redant.Command {
 			}
 
 			tags := utils.GetAllGitTags(ctx)
-
-			var ver *semver.Version
 			verFile := ".version/VERSION"
+			var ver *semver.Version
 			if selected != envRelease {
-				//if pathutil.IsExist(verFile) {
-				//vv := strings.TrimPrefix(string(lo.Must1(os.ReadFile(verFile))), "v")
-				//maxTag := lo.MaxBy(tags, func(a *semver.Version, b *semver.Version) bool { return a.Compare(b) > 0 })
-				//if maxTag != nil && maxTag.Core().String() != vv {
-				//	log.Warn().Str("max-version", maxTag.Core().String()).Msg("current version is not equal to .version")
-				//}
-
-				//tags = lo.Filter(tags, func(item *semver.Version, index int) bool { return item.Core().String() == vv })
-				//if len(tags) == 0 {
-				//	ver = lo.Must1(semver.NewSemver(fmt.Sprintf("%s-%s.1", lo.Must1(os.ReadFile(verFile)), selected)))
-				//} else {
-				//	ver = utils.GetNextTag(selected, tags)
-				//}
-				//} else {
 				ver = utils.GetNextTag(selected, tags)
-				//}
 			} else {
 				if pathutil.IsExist(verFile) {
 					ver = lo.Must(semver.NewSemver(strings.TrimSpace(string(lo.Must1(os.ReadFile(verFile))))))
@@ -161,51 +149,94 @@ func New() *redant.Command {
 			}
 
 			tagName := "v" + strings.TrimPrefix(ver.Original(), "v")
-			var p1 = tea.NewProgram(InitialTextInputModel(tagName))
+			p1 := tea.NewProgram(InitialTextInputModel(tagName))
 			m1 := assert.Must1(p1.Run()).(model2)
 			if m1.exit {
 				return nil
 			}
 
 			tagName = m1.Value()
-			ver, err := semver.NewVersion(tagName)
-			if err != nil {
-				return errors.Errorf("tag name is not valid: %s", tagName)
-			}
-
-			for _, cfg := range params.CommitCfg {
-				if !cfg.GenVersion {
-					continue
-				}
-
-				dir := filepath.Dir(verFile)
-				if !pathutil.IsDir(dir) {
-					_ = pathutil.DeleteFile(dir)
-					_ = pathutil.MkDir(dir)
-				}
-
-				assert.Exit(os.WriteFile(verFile, []byte("v"+ver.Core().String()+"\n"), 0644))
-				break
-			}
-
-			isDirty := utils.IsDirty().Unwrap()
-			if isDirty {
-				preMsg := strings.TrimSpace(utils.ShellExecOutput(ctx, "git", "log", "-1", "--pretty=%B").Unwrap())
-				assert.Must(utils.ShellExec(ctx, "git", "add", "-A"))
-				utils.ShellExecOutput(ctx, "git", "status").Unwrap()
-				assert.Must(utils.ShellExec(ctx, "git", "commit", "--amend", "--no-edit", "-m", strconv.Quote(preMsg)))
-				fmt.Println(utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName()))
-			}
-
-			output := utils.GitPushTag(ctx, tagName)
-			if utils.IsRemoteTagExist(output) {
-				utils.Spin("fetch git tag: ", func() (r result.Result[any]) {
-					utils.GitFetchAll(ctx)
-					return
-				})
-			}
-
-			return nil
+			return validateAndPublishTag(ctx, tagName, verFile, params.CommitCfg)
 		},
 	}
+}
+
+func validateAndPublishTag(ctx context.Context, tagName, verFile string, commitCfg []*fastcommitcmd.Config) error {
+	ver, err := semver.NewVersion(tagName)
+	if err != nil {
+		return errors.Errorf("tag name is not valid: %s", tagName)
+	}
+
+	if utils.IsDirty().Unwrap() {
+		return errors.New("working tree has uncommitted changes, please commit or stash before tagging")
+	}
+
+	if err := ensureVersionAligned(verFile, ver, commitCfg); err != nil {
+		return err
+	}
+
+	return publishTag(ctx, tagName)
+}
+
+func ensureVersionAligned(verFile string, tag *semver.Version, commitCfg []*fastcommitcmd.Config) error {
+	needsVersionAlign := false
+	for _, cfg := range commitCfg {
+		if cfg.GenVersion {
+			needsVersionAlign = true
+			break
+		}
+	}
+
+	if !needsVersionAlign || !pathutil.IsExist(verFile) {
+		return nil
+	}
+
+	raw := strings.TrimSpace(string(lo.Must1(os.ReadFile(verFile))))
+	if raw == "" {
+		return nil
+	}
+
+	fileVer, err := semver.NewVersion(raw)
+	if err != nil {
+		return errors.Errorf("%s content is invalid semver: %s", verFile, raw)
+	}
+
+	if fileVer.Core().String() != tag.Core().String() {
+		return errors.Errorf("%s (%s) is not aligned with tag core (%s), please update and commit first", verFile, fileVer.Core().String(), tag.Core().String())
+	}
+
+	return nil
+}
+
+func publishTag(ctx context.Context, tagName string) error {
+	exists, err := remoteTagExists(ctx, tagName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return errors.Errorf("remote tag already exists: %s", tagName)
+	}
+
+	if localTagExists(tagName) {
+		return errors.Errorf("local tag already exists: %s", tagName)
+	}
+
+	if err := utils.ShellExec(ctx, "git", "tag", tagName); err != nil {
+		return err
+	}
+	return utils.ShellExec(ctx, "git", "push", "origin", tagName)
+}
+
+func remoteTagExists(ctx context.Context, tagName string) (bool, error) {
+	ref := "refs/tags/" + tagName
+	r := utils.ShellExecOutput(ctx, "git", "ls-remote", "--tags", "origin", ref)
+	if err := r.GetErr(); err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(r.Unwrap()) != "", nil
+}
+
+func localTagExists(tagName string) bool {
+	cmd := exec.Command("git", "rev-parse", "-q", "--verify", "refs/tags/"+tagName)
+	return cmd.Run() == nil
 }
