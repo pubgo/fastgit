@@ -4,10 +4,65 @@ agentic git commit generate tool
 ## Command Overview
 - `fastgit commit`: AI 提交流程（保留原行为）
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
+- `fastgit changelog init`: 初始化 `.version/changelog` 模板，适配任意项目仓库
+- `fastgit changelog draft`: 使用 Copilot 根据当前改动更新 `Unreleased.md`
+- `fastgit changelog release`: 将 `Unreleased.md` 落版为版本文件，并可同步推进 `.version/VERSION`
+- `fastgit docs init`: 初始化文档维护用的 prompt / instruction 模板
+- `fastgit pull`: 拉取当前分支（支持 `--all`）
+- `fastgit push`: 推送当前分支（支持 `--all` / `--force`）
 - `fastgit ggc list`: 查看统一命令面（ggc 风格）
 - `fastgit ggc <command ...>`: 执行统一命令，例如 `fastgit ggc status short`
 - `fastgit ggc` / `fastgit ggc interactive`: 进入交互模式（增量搜索 + workflow）
 - `fastgit ggc path`: 查看当前 `ggc.yaml` 的实际路径（按 OS/XDG 规则）
+
+## Repo Prompt Templates
+
+`fastgit` 现在支持为仓库初始化一组可直接复用的 Copilot prompt / instruction 模板，适合把常用工作流沉淀到项目里，而不是只存在聊天上下文中。
+
+### Changelog 模板
+
+- 初始化：`fastgit changelog init`
+- 生成后会创建：
+	- `.version/changelog/*`
+	- `.github/prompts/changelog.prompt.md`
+	- `.github/instructions/changelog.instructions.md`
+	- `.github/instructions/release.instructions.md`
+
+适合场景：
+
+- 维护 `Unreleased.md`
+- 准备版本落版
+- 统一 changelog 分类与发布流程
+
+### Documentation 模板
+
+- 初始化：`fastgit docs init`
+- 生成后会创建：
+	- `.github/prompts/documentation.prompt.md`
+	- `.github/prompts/commit-message.prompt.md`
+	- `.github/instructions/documentation.instructions.md`
+
+适合场景：
+
+- 更新 `README.md`
+- 同步 `docs/**`
+- 维护 `example/**/README.md`
+- 生成或沉淀提交信息 / 提交流程 prompt 模板
+- 让文档写作遵循统一中文技术文风与结构规范
+
+### Commit Prompt 模板
+
+仓库中还可以维护提交辅助 prompt，例如：
+
+- `.github/prompts/commit-message.prompt.md`
+
+当前这类 prompt 可用于：
+
+- 基于 staged / working tree 改动生成提交信息
+- 按模板约束执行本地提交
+- 按模板约束继续推送到远程（如果 prompt 明确要求）
+
+> 建议：把“生成建议”和“执行提交”区分成不同 prompt，便于在不同风险场景下选择更稳妥的工作流。
 
 ## New ggc-style command surface (phase 1)
 

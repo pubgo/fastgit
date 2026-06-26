@@ -12,11 +12,14 @@ import (
 	"github.com/pubgo/dix/v2/dixcontext"
 	"github.com/pubgo/fastgit/cmds/chglogcmd"
 	"github.com/pubgo/fastgit/cmds/configcmd"
+	"github.com/pubgo/fastgit/cmds/copilotcmd"
+	"github.com/pubgo/fastgit/cmds/docscmd"
 	"github.com/pubgo/fastgit/cmds/fastcommitcmd"
 	"github.com/pubgo/fastgit/cmds/ggccmd"
 	"github.com/pubgo/fastgit/cmds/historycmd"
 	"github.com/pubgo/fastgit/cmds/initcmd"
 	"github.com/pubgo/fastgit/cmds/pullcmd"
+	"github.com/pubgo/fastgit/cmds/pushcmd"
 	"github.com/pubgo/fastgit/cmds/sshcmd"
 	"github.com/pubgo/fastgit/cmds/tagcmd"
 	"github.com/pubgo/fastgit/cmds/upgradecmd"
@@ -42,8 +45,11 @@ func Main() {
 		ggccmd.New(),
 		fastcommitcmd.New(),
 		configcmd.New(),
+		docscmd.New(),
 		pullcmd.New(),
+		pushcmd.New(),
 		chglogcmd.NewCommand(),
+		copilotcmd.New(),
 	)
 }
 
