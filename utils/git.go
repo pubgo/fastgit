@@ -18,7 +18,6 @@ import (
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/log/logfields"
 	"github.com/pubgo/funk/v2/result"
-	"github.com/rs/zerolog"
 )
 
 // KnownError 是一个自定义错误类型
@@ -88,7 +87,7 @@ func GitFetchAll(ctx context.Context) {
 
 func IsDirty() (r result.Result[bool]) {
 	output := result.Wrap(script.Exec("git status --porcelain").String()).
-		Log(func(e *zerolog.Event) {
+		Log(func(e result.Event) {
 			e.Str(logfields.Msg, "failed to gitRun git")
 		})
 
@@ -99,13 +98,13 @@ func IsDirty() (r result.Result[bool]) {
 
 func GetCommitCount(branch string) (r result.Result[int]) {
 	shell := fmt.Sprintf("git rev-list %s --count", branch)
-	output := result.Wrap(script.Exec(shell).String()).Log(func(e *zerolog.Event) {
+	output := result.Wrap(script.Exec(shell).String()).Log(func(e result.Event) {
 		e.Str(logfields.Msg, fmt.Sprintf("failed to gitRun shell %q", shell))
 	})
 
 	return result.FlatMapTo(output, func(count string) result.Result[int] {
 		count = strings.TrimSpace(count)
-		return result.Wrap(strconv.Atoi(count)).Log(func(e *zerolog.Event) {
+		return result.Wrap(strconv.Atoi(count)).Log(func(e result.Event) {
 			e.Str(logfields.Msg, "failed to parse git output")
 		})
 	})

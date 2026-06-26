@@ -51,8 +51,8 @@ func initConfig() {
 	type versionConfigProvider struct {
 		Version *configs.Version `yaml:"version"`
 	}
-	var cfg versionConfigProvider
-	config.LoadFromPath(&cfg, configPath)
+	cfgResult := assert.Must1(config.LoadFromPath[versionConfigProvider](configPath))
+	cfg := cfgResult.T
 
 	var defaultCfg versionConfigProvider
 	defaultConfigData := configs.GetDefaultConfig()

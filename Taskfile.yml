@@ -63,7 +63,7 @@ tasks:
 
   vet:
     cmds:
-      - go vet ./...
+      - env -u GOROOT go vet ./...
   test:
     cmds:
       - go test -short -race -v ./... -cover

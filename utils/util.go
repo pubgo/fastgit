@@ -22,7 +22,6 @@ import (
 	"github.com/pubgo/funk/v2/recovery"
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/funk/v2/typex"
-	"github.com/rs/zerolog"
 	"github.com/samber/lo"
 	"github.com/tidwall/match"
 	_ "github.com/tidwall/match"
@@ -216,7 +215,7 @@ func ShellExecOutput(ctx context.Context, args ...string) (r result.Result[strin
 	cmdLine := strings.TrimSpace(strings.Join(args, " "))
 	log.Info().Msgf("shell: %s", cmdLine)
 
-	args = result.Wrap(shell.Fields(cmdLine, nil)).UnwrapOrLog(func(e *zerolog.Event) {
+	args = result.Wrap(shell.Fields(cmdLine, nil)).UnwrapOrLog(func(e result.Event) {
 		e.Str("shell", cmdLine)
 	})
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)

@@ -22,7 +22,6 @@ func main() {
 	time.Sleep(time.Minute)
 	spin.Stop("Connected", 0)
 	fmt.Println()
-	return
 	fmt.Println("Styled Select Example")
 	fmt.Println("Use arrow keys (or hjkl) to navigate, Enter to select, Ctrl+C to cancel")
 	fmt.Println()
