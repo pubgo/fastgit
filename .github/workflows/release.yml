@@ -2,6 +2,7 @@ name: Release
 on:
   push:
     tags: [ "v*.*.*" ]
+    tags-ignore: [ "*-*" ]
 
 permissions:
   contents: write
