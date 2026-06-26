@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 
 	"github.com/pubgo/fastgit/utils"
@@ -13,6 +14,7 @@ import (
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/redant"
+	"mvdan.cc/sh/v3/shell"
 )
 
 type cmdParams struct {
@@ -22,6 +24,7 @@ type cmdParams struct {
 func New() *redant.Command {
 	var flagData = new(struct {
 		pullAll bool
+		hard    bool
 	})
 	app := &redant.Command{
 		Use:   "pull",
@@ -31,6 +34,11 @@ func New() *redant.Command {
 				Flag:        "all",
 				Description: "pull all branches",
 				Value:       redant.BoolOf(&flagData.pullAll),
+			},
+			{
+				Flag:        "hard",
+				Description: "force sync current branch with remote via fetch + reset --hard",
+				Value:       redant.BoolOf(&flagData.hard),
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
@@ -54,23 +62,30 @@ func New() *redant.Command {
 
 			utils.LogConfigAndBranch()
 
-			isDirty := utils.IsDirty().Unwrap()
-			if isDirty {
-				return
+			if flagData.pullAll && flagData.hard {
+				return errors.New("--hard cannot be used with --all")
 			}
 
 			if flagData.pullAll {
-				utils.GitPull(ctx, "--all").Must()
-			} else {
-				utils.GitBranchSetUpstream(ctx, utils.GetBranchName()).Must()
+				return utils.GitPull(ctx, "--all").GetErr()
+			}
 
-				err := utils.GitPull(ctx, "origin", utils.GetBranchName()).GetErr()
-				if err != nil {
-					if isMergeConflict() {
-						handleMergeConflict()
-					} else {
-						os.Exit(1)
-					}
+			if flagData.hard {
+				return hardSyncCurrentBranch(ctx, utils.GetBranchName())
+			}
+
+			isDirty := utils.IsDirty().Unwrap()
+			if isDirty {
+				return errors.New("working tree has uncommitted changes, use --hard to force sync or commit/stash first")
+			}
+
+			err := pullCurrentBranch(ctx, utils.GetBranchName())
+			if err != nil {
+				if isMergeConflict() {
+					handleMergeConflict()
+					return nil
+				} else {
+					return err
 				}
 			}
 			return
@@ -87,13 +102,54 @@ func shouldPullDueToRemoteUpdate(msg string) bool {
 		strings.Contains(msg, "remote rejected")
 }
 
-// 执行 git pull（默认 merge 模式）
-func gitPull() error {
-	cmd := exec.Command("git", "pull", "--no-rebase")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+func pullCurrentBranch(ctx context.Context, branch string) error {
+	if hasUpstream() {
+		return utils.GitPull(ctx).GetErr()
+	}
+
+	if err := utils.GitBranchSetUpstream(ctx, branch).GetErr(); err != nil {
+		return utils.GitPull(ctx, "origin", branch).GetErr()
+	}
+
+	return utils.GitPull(ctx).GetErr()
+}
+
+func hasUpstream() bool {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	return cmd.Run() == nil
+}
+
+func getUpstreamRef() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func hardSyncCurrentBranch(ctx context.Context, branch string) error {
+	upstream := fmt.Sprintf("origin/%s", branch)
+	if up, err := getUpstreamRef(); err == nil && up != "" {
+		upstream = up
+	}
+
+	remote, remoteBranch := splitRemoteRef(upstream)
+	if err := utils.ShellExec(ctx, "git", "fetch", "--prune", remote, remoteBranch); err != nil {
+		return err
+	}
+	return utils.ShellExec(ctx, "git", "reset", "--hard", upstream)
+}
+
+func splitRemoteRef(ref string) (remote, branch string) {
+	parts := strings.Split(ref, "/")
+	if len(parts) < 2 {
+		return "origin", ref
+	}
+
+	remote = parts[0]
+	branch = path.Clean(strings.Join(parts[1:], "/"))
+	return remote, branch
 }
 
 // 检查是否存在未解决的合并冲突（U=unmerged）
@@ -122,7 +178,8 @@ func handleMergeConflict() {
 		}
 		fmt.Printf("📝 Conflict in file: %s\n", file)
 
-		editCmd := exec.Command(editor, file)
+		editorArgs := buildEditorCommand(editor, file)
+		editCmd := exec.Command(editorArgs[0], editorArgs[1:]...)
 		editCmd.Stdin = os.Stdin
 		editCmd.Stdout = os.Stdout
 		editCmd.Stderr = os.Stderr
@@ -158,6 +215,14 @@ func getEditor() string {
 		return "nano"
 	}
 	return "vi"
+}
+
+func buildEditorCommand(editor, file string) []string {
+	fields, err := shell.Fields(editor, nil)
+	if err != nil || len(fields) == 0 {
+		return []string{editor, file}
+	}
+	return append(fields, file)
 }
 
 // 提示用户如何继续

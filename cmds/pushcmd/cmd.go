@@ -52,27 +52,19 @@ func New() *redant.Command {
 
 			utils.LogConfigAndBranch()
 
-			isDirty := utils.IsDirty().Unwrap()
-			if isDirty {
-				return nil
-			}
-
 			if flagData.pushAll && flagData.pushForce {
 				return errors.Errorf("--force cannot be used with --all")
 			}
 
 			if flagData.pushAll {
-				utils.GitPush(ctx, "--all", "origin")
-				return nil
+				return utils.ShellExec(ctx, "git", "push", "--all", "origin")
 			}
 
 			if flagData.pushForce {
-				utils.GitPush(ctx, "--force-with-lease", "--set-upstream", "origin", utils.GetBranchName())
-				return nil
+				return utils.ShellExec(ctx, "git", "push", "--force-with-lease", "--set-upstream", "origin", utils.GetBranchName())
 			}
 
-			utils.GitPush(ctx, "--set-upstream", "origin", utils.GetBranchName())
-			return nil
+			return utils.ShellExec(ctx, "git", "push", "--set-upstream", "origin", utils.GetBranchName())
 		},
 	}
 }
