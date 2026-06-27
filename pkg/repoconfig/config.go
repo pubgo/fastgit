@@ -14,8 +14,8 @@ const repoConfigDir = ".fastgit"
 
 // Policy defines team governance rules for a repository.
 type Policy struct {
-	Enforce           bool `yaml:"enforce"`
-	Branch            struct {
+	Enforce bool `yaml:"enforce"`
+	Branch  struct {
 		Pattern string `yaml:"pattern"`
 	} `yaml:"branch"`
 	ProtectedBranches []string `yaml:"protected_branches"`
@@ -250,7 +250,7 @@ sensitive_paths:
 const defaultCommitYAML = `locale: en
 max_length: 72
 require_scope: false
-candidates_default: false
+candidates_default: true
 types:
   - feat
   - fix

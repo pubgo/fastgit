@@ -23,13 +23,15 @@ type flagOptions struct {
 	fastCommit     bool
 	amend          bool
 	candidates     bool
+	single         bool
 	skipCheck      bool
 	skipPolicy     bool
 	overridePolicy bool
 }
 
 type Config struct {
-	GenVersion bool `yaml:"gen_version"`
+	GenVersion        bool `yaml:"gen_version"`
+	CandidatesDefault bool `yaml:"candidates_default"`
 }
 
 type cmdParams struct {
@@ -67,6 +69,11 @@ func New() *redant.Command {
 						Flag:        "candidates",
 						Description: "Generate 3 commit message candidates to pick from.",
 						Value:       redant.BoolOf(&flags.candidates),
+					},
+					{
+						Flag:        "single",
+						Description: "Generate a single commit message (skip multi-candidate picker).",
+						Value:       redant.BoolOf(&flags.single),
 					},
 					{
 						Flag:        "skip-check",
@@ -126,6 +133,11 @@ func New() *redant.Command {
 				Flag:        "candidates",
 				Description: "Generate 3 commit message candidates to pick from.",
 				Value:       redant.BoolOf(&flags.candidates),
+			},
+			{
+				Flag:        "single",
+				Description: "Generate a single commit message (skip multi-candidate picker).",
+				Value:       redant.BoolOf(&flags.single),
 			},
 			{
 				Flag:        "skip-check",
@@ -267,16 +279,6 @@ func gitPull() error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
-}
-
-// 检查是否存在未解决的合并冲突（U=unmerged）
-func isMergeConflict() bool {
-	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return len(strings.TrimSpace(string(output))) > 0
 }
 
 // 处理合并冲突：输出摘要并打开编辑器

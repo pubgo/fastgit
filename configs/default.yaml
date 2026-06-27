@@ -6,6 +6,7 @@ openai:
   model: ${OPENAI_MODEL}
 commit:
   gen_version: ${FASTGIT_GEN_VERSION}
+  candidates_default: true
 
 copilot:
   permission_mode: ask

@@ -111,11 +111,11 @@ flowchart LR
 
 #### 验收标准（DoD）
 
-- [ ] 在包含多包 Go 项目中，`check run` 能稳定执行并返回明确退出码
-- [ ] 失败项可读（指出失败阶段与摘要）
-- [ ] `--staged-only` 在无 staged 文件时给出可理解提示
-- [ ] `--dry-run` 不修改工作区、不安装钩子
-- [ ] 至少具备单元测试覆盖参数解析与执行分支
+- [x] 在包含多包 Go 项目中，`check run` 能稳定执行并返回明确退出码
+- [x] 失败项可读（指出失败阶段与摘要）
+- [x] `--staged-only` 在无 staged 文件时给出可理解提示
+- [x] `--dry-run` 不修改工作区、不安装钩子
+- [x] 至少具备单元测试覆盖参数解析与执行分支
 
 #### 当前进度
 
@@ -284,13 +284,9 @@ PR 正文建议固定小节，便于 review：
 
 - [x] 候选消息具备可区分风格（`--candidates`：SHORT/MEDIUM/CONVENTIONAL）
 - [x] breaking change 启发式提示
-- [ ] 团队模板（scope、前缀、语言）
+- [x] 团队模板（scope、前缀、语言）
 - [x] `.fastgit/commit.yaml` 团队 types/locale + `candidates_default`
-
-#### 当前进度
-
-- [x] `fastgit commit --candidates` 三选一（tap.Select）
-- [ ] 默认启用多候选（当前需显式传 flag）
+- [x] 默认启用多候选（全局 config + team init 默认 `candidates_default: true`，`--single` 逃生）
 
 ---
 

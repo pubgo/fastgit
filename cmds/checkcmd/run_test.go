@@ -73,6 +73,107 @@ func TestRunStagedOnlyEmptyFails(t *testing.T) {
 	require.Contains(t, err.Error(), "no staged files")
 }
 
+func TestRunMultiPackageStagedDryRun(t *testing.T) {
+	repo := setupMultiPackageGoRepo(t)
+
+	results, err := Run(context.Background(), minimalGoConfig(), RunOptions{
+		StagedOnly: true,
+		DryRun:     true,
+		RepoRoot:   repo,
+	})
+	require.NoError(t, err)
+
+	vet := findStepResult(results, "vet")
+	require.NotNil(t, vet)
+	require.Contains(t, vet.Output, "./pkg/alpha/...")
+	require.Contains(t, vet.Output, "./pkg/beta/...")
+
+	test := findStepResult(results, "test")
+	require.NotNil(t, test)
+	require.Contains(t, test.Output, "./pkg/alpha/...")
+	require.Contains(t, test.Output, "./pkg/beta/...")
+}
+
+func TestRunMultiPackageStagedExecutes(t *testing.T) {
+	repo := setupMultiPackageGoRepo(t)
+
+	results, err := Run(context.Background(), minimalGoConfig(), RunOptions{
+		StagedOnly: true,
+		RepoRoot:   repo,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, results)
+	for _, r := range results {
+		require.Nil(t, r.Err, "step %s failed: %s", r.Step.Name, r.Output)
+	}
+}
+
+func TestRunFailureIncludesStepName(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+
+	cfg := Config{Steps: []Step{{Name: "broken", Command: "exit 1"}}}
+	results, err := Run(context.Background(), cfg, RunOptions{RepoRoot: repo})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "broken failed")
+	require.Equal(t, "broken", FailedStepName(results))
+}
+
+func TestRunDryRunDoesNotModifyWorkspace(t *testing.T) {
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+	writeRepoFile(t, repo, "go.mod", "module example.com/demo\n\ngo 1.22\n")
+	writeRepoFile(t, repo, "main.go", "package main\n\nfunc main() {\nprintln(\"hi\")\n}\n")
+	runGit(t, repo, "add", "go.mod", "main.go")
+
+	before, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	require.NoError(t, err)
+
+	_, err = Run(context.Background(), Config{Steps: []Step{
+		{Name: "fmt", Command: "gofmt -w .", Fixable: true, FixCommand: "gofmt -w ."},
+	}}, RunOptions{DryRun: true, Fix: true, RepoRoot: repo})
+	require.NoError(t, err)
+
+	after, err := os.ReadFile(filepath.Join(repo, "main.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(before), string(after))
+}
+
+func minimalGoConfig() Config {
+	return Config{Steps: []Step{
+		{Name: "fmt", Command: "gofmt -l .", FixCommand: "gofmt -w .", Fixable: true},
+		{Name: "vet", Command: "go vet ./..."},
+		{Name: "test", Command: "go test -short ./..."},
+	}}
+}
+
+func setupMultiPackageGoRepo(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	initGitRepo(t, repo)
+	writeRepoFile(t, repo, "go.mod", "module example.com/demo\n\ngo 1.22\n")
+	writeRepoFile(t, repo, "pkg/alpha/a.go", "package alpha\n\nfunc A() int { return 1 }\n")
+	writeRepoFile(t, repo, "pkg/beta/b.go", "package beta\n\nfunc B() int { return 2 }\n")
+	runGit(t, repo, "add", ".")
+	return repo
+}
+
+func writeRepoFile(t *testing.T, repo, relPath, content string) {
+	t.Helper()
+	path := filepath.Join(repo, relPath)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func findStepResult(results []StepResult, name string) *StepResult {
+	for i := range results {
+		if results[i].Step.Name == name {
+			return &results[i]
+		}
+	}
+	return nil
+}
+
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 	runGit(t, dir, "init")

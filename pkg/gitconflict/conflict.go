@@ -113,7 +113,7 @@ func suggestReason(path string) string {
 
 func renderSummary(files []File, groups map[string][]string) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Detected %d conflicted file(s) in %d module group(s).\n\n", len(files), len(groups)))
+	fmt.Fprintf(&b, "Detected %d conflicted file(s) in %d module group(s).\n\n", len(files), len(groups))
 
 	keys := make([]string, 0, len(groups))
 	for key := range groups {
@@ -122,7 +122,7 @@ func renderSummary(files []File, groups map[string][]string) string {
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		b.WriteString(fmt.Sprintf("## %s\n", key))
+		fmt.Fprintf(&b, "## %s\n", key)
 		for _, path := range groups[key] {
 			reason := ""
 			for _, file := range files {
@@ -131,9 +131,9 @@ func renderSummary(files []File, groups map[string][]string) string {
 					break
 				}
 			}
-			b.WriteString(fmt.Sprintf("- %s\n", path))
+			fmt.Fprintf(&b, "- %s\n", path)
 			if reason != "" {
-				b.WriteString(fmt.Sprintf("  - %s\n", reason))
+				fmt.Fprintf(&b, "  - %s\n", reason)
 			}
 		}
 		b.WriteByte('\n')

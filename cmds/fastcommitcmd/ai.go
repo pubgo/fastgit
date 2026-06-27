@@ -173,7 +173,7 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		repoCfg.Commit.Types,
 	)
 
-	useCandidates := flags.candidates || repoCfg.Commit.CandidatesDefault
+	useCandidates := shouldUseCandidates(flags, repoCfg, params)
 	var msg string
 	if useCandidates {
 		candidates, err := aiprovider.GenerateCommitCandidates(ctx, params.AI, diffResult.Diff)
@@ -256,4 +256,22 @@ func mustRepoRoot() string {
 		return "."
 	}
 	return wd
+}
+
+func shouldUseCandidates(flags *flagOptions, repoCfg repoconfig.Bundle, params cmdParams) bool {
+	if flags != nil && flags.single {
+		return false
+	}
+	if flags != nil && flags.candidates {
+		return true
+	}
+	if repoCfg.Commit.CandidatesDefault {
+		return true
+	}
+	for _, cfg := range params.CommitCfg {
+		if cfg != nil && cfg.CandidatesDefault {
+			return true
+		}
+	}
+	return false
 }

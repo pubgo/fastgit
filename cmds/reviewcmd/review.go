@@ -68,7 +68,7 @@ func ruleBasedReview(diff string) string {
 	var b strings.Builder
 	b.WriteString("## Blockers\n\nNone (rule-based review; AI unavailable)\n\n")
 	b.WriteString("## Suggestions\n\n")
-	b.WriteString(fmt.Sprintf("- Review %d changed file(s) manually\n", fileCount))
+	fmt.Fprintf(&b, "- Review %d changed file(s) manually\n", fileCount)
 	b.WriteString("- Run `fastgit check run --staged-only`\n\n")
 	b.WriteString("## Nits\n\nNone\n\n")
 	b.WriteString("## Test plan\n\n- [ ] Run tests for affected packages\n")

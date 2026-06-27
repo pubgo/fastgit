@@ -60,7 +60,7 @@ func newRunCommand() *redant.Command {
 				warnSensitiveStaged(inv, repoRoot, stagedFiles)
 			}
 			results, err := Run(ctx, cfg, opts)
-			printResults(inv, results, dryRun)
+			printResults(inv, results, dryRun, err)
 			return err
 		},
 	}
@@ -134,7 +134,7 @@ func newHookCommand() *redant.Command {
 	return hook
 }
 
-func printResults(inv *redant.Invocation, results []StepResult, dryRun bool) {
+func printResults(inv *redant.Invocation, results []StepResult, dryRun bool, runErr error) {
 	for _, r := range results {
 		if r.Output != "" {
 			_, _ = fmt.Fprintln(inv.Stdout, r.Output)
@@ -145,7 +145,11 @@ func printResults(inv *redant.Invocation, results []StepResult, dryRun bool) {
 	}
 	if dryRun {
 		_, _ = fmt.Fprintln(inv.Stdout, "dry-run complete (no changes made)")
-	} else {
-		_, _ = fmt.Fprintln(inv.Stdout, "check passed")
+		return
 	}
+	if runErr != nil {
+		_, _ = fmt.Fprintln(inv.Stderr, FormatFailureSummary(results, runErr))
+		return
+	}
+	_, _ = fmt.Fprintln(inv.Stdout, "check passed")
 }

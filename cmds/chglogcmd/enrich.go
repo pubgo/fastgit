@@ -82,7 +82,7 @@ func deriveImpact(names []string) string {
 		b.WriteString(area)
 		b.WriteByte('\n')
 	}
-	b.WriteString(fmt.Sprintf("- 共 %d 个文件变更", len(names)))
+	fmt.Fprintf(&b, "- 共 %d 个文件变更", len(names))
 	return strings.TrimSpace(b.String())
 }
 

@@ -51,8 +51,8 @@
 
 - 提示词由 `utils.GeneratePrompt()` 统一生成
 - 默认限制提交信息风格与长度
-- 支持 `--amend`、`--fast`、`--candidates`、`--skip-check`、`--skip-policy`、`--override-policy`
-- `.fastgit/commit.yaml` 可设 `candidates_default: true` 默认三选一
+- 支持 `--amend`、`--fast`、`--candidates`、`--single`、`--skip-check`、`--skip-policy`、`--override-policy`
+- 默认三选一（`~/.config/fastgit/config.yaml` 中 `commit.candidates_default: true`；`.fastgit/commit.yaml` 可覆盖）
 - 提交前默认运行 `check run --staged-only`（可用 `--skip-check` 跳过）
 - `.fastgit/policy.yaml` 中 `enforce: true` 时，分支名/commit message 违规将阻断提交
 - 读取 `.fastgit/commit.yaml`（locale、max_length、require_scope）

@@ -97,8 +97,8 @@ func renderBody(commits, diffStat, diffNames string, rc RepoContext) string {
 	b.WriteString("- [ ] Verify affected modules manually\n")
 
 	b.WriteString("\n## Rollback\n\n")
-	b.WriteString(fmt.Sprintf("- Revert commits on `%s` or close PR without merge\n", rc.Branch))
-	b.WriteString(fmt.Sprintf("- Base branch: `%s`\n", rc.BaseRef))
+	fmt.Fprintf(&b, "- Revert commits on `%s` or close PR without merge\n", rc.Branch)
+	fmt.Fprintf(&b, "- Base branch: `%s`\n", rc.BaseRef)
 
 	return b.String()
 }

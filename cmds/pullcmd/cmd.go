@@ -9,9 +9,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/fastgit/pkg/gitconflict"
 	"github.com/pubgo/fastgit/pkg/workflow"
+	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/result"
@@ -142,16 +142,6 @@ func splitRemoteRef(ref string) (remote, branch string) {
 	remote = parts[0]
 	branch = path.Clean(strings.Join(parts[1:], "/"))
 	return remote, branch
-}
-
-// 检查是否存在未解决的合并冲突（U=unmerged）
-func isMergeConflict() bool {
-	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return len(strings.TrimSpace(string(output))) > 0
 }
 
 // 处理合并冲突：输出摘要并打开编辑器
