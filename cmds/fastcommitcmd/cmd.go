@@ -306,5 +306,5 @@ func informUserToAmendAndPush() {
 	fmt.Println("----------------------------------------")
 
 	fmt.Println("\nPress Enter after you're done...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
 }

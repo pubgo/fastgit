@@ -236,7 +236,7 @@ func releaseChangelog(repoRoot string, opts releaseOptions) (releaseResult, erro
 
 	sections := parseStandardSections(string(unreleasedContent))
 	if !hasMeaningfulEntries(sections) {
-		return releaseResult{}, errors.New("Unreleased.md 中没有可发布的变更条目")
+		return releaseResult{}, errors.New("unreleased.md 中没有可发布的变更条目")
 	}
 	releaseContent := renderReleaseContent(currentVersion, time.Now(), sections)
 	nextVersion, err := resolveNextVersion(currentVersion, strings.TrimSpace(opts.NextVersion), strings.TrimSpace(opts.Bump))
@@ -304,10 +304,10 @@ func renderUnreleasedTemplate() string {
 
 func renderReleaseContent(version string, now time.Time, sections map[string]string) string {
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("# [%s] - %s\n\n", version, now.Format("2006-01-02")))
+	_, _ = fmt.Fprintf(&buf, "# [%s] - %s\n\n", version, now.Format("2006-01-02"))
 	for _, title := range standardSections {
 		body := normalizeSectionBody(sections[title])
-		buf.WriteString("## " + title + "\n\n")
+		_, _ = fmt.Fprintf(&buf, "## %s\n\n", title)
 		buf.WriteString(body)
 		buf.WriteString("\n\n")
 	}
@@ -389,7 +389,7 @@ func renderChangelogReadme(changelogDir string) (string, error) {
 	buf.WriteString("## 当前版本文件\n\n")
 	buf.WriteString("- [`Unreleased.md`](Unreleased.md)\n")
 	for _, version := range versions {
-		buf.WriteString(fmt.Sprintf("- [`%s.md`](%s.md)\n", version, version))
+		_, _ = fmt.Fprintf(&buf, "- [`%s.md`](%s.md)\n", version, version)
 	}
 	buf.WriteString("\n## 维护约定\n\n")
 	buf.WriteString("- 分类保持：`新增` / `修复` / `变更` / `文档`。\n")

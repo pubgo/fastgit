@@ -1,7 +1,6 @@
 package githubclient
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -80,21 +79,6 @@ func (as Assets) HasM1() bool {
 		}
 	}
 	return false
-}
-
-func checkExt(url string, size int, name string) error {
-	fext := getFileExt(url)
-	if fext == "" && size > 1024*1024 {
-		fext = ".bin" // +1MB binary
-	}
-
-	switch fext {
-	case ".bin", ".zip", ".tar.bz", ".tar.bz2", ".bz2", ".gz", ".tar.gz", ".tgz":
-		// valid
-		return nil
-	default:
-		return fmt.Errorf("fetched asset has unsupported file type: %s (ext '%s')", name, fext)
-	}
 }
 
 func GetSizeFormat(size int) string {

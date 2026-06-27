@@ -387,13 +387,13 @@ func loginSSH(ip string, port int, user, password, secondPass string, timeout ti
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	sess, err := conn.NewSession()
 	if err != nil {
 		return err
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 
 	rows, cols := getTerminalSize(stdinFD)
 	if err = sess.RequestPty("xterm-256color", rows, cols, ssh.TerminalModes{ssh.ECHO: 1}); err != nil {

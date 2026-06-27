@@ -42,10 +42,12 @@ func New() *redant.Command {
 
 			if pathutil.IsNotExist(localPath) {
 				file := assert.Exit1(os.Create(localPath))
-				defer file.Close()
+				defer func() { _ = file.Close() }()
 				for name, cfg := range config.LoadEnvMap(cfgPath) {
 					envData := strutil.FirstNotEmpty(cfg.Value, cfg.Default, "")
-					fmt.Fprintln(file, fmt.Sprintf(`%s=%q`, name, envData))
+					if _, err := fmt.Fprintf(file, "%s=%q\n", name, envData); err != nil {
+						return err
+					}
 				}
 				log.Info().Msgf("local env created: %s", localPath)
 			} else {

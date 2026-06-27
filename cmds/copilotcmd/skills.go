@@ -149,10 +149,6 @@ func newSkillsCmdWithService(profileName, profileFile *string, cliSkillDirs *[]s
 	return root
 }
 
-func resolveSkillDirs(profileName, profileFile string, cliSkillDirs []string) ([]string, error) {
-	return resolveSkillDirsWithService(profileName, profileFile, cliSkillDirs, skillsmodule.NewService())
-}
-
 func resolveSkillDirsWithService(profileName, profileFile string, cliSkillDirs []string, svc skillsmodule.Service) ([]string, error) {
 	if svc == nil {
 		svc = skillsmodule.NewService()

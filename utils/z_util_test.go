@@ -2,7 +2,6 @@ package utils_test
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ hint: Updates were rejected because the tag already exists in the remote.`
 
 func TestMatch(t *testing.T) {
 	var txt = `123  Your branch and 'origin/feat/genai' have diverged 123`
-	t.Log(match.Match(txt, fmt.Sprintf("*Your branch and '*feat/genai' have diverged*")))
+	t.Log(match.Match(txt, "*Your branch and '*feat/genai' have diverged*"))
 
 	t.Log(strings.Contains(utils.ShellExecOutput(context.Background(), "git", "reflog", "-1").Unwrap(), "(amend)"))
 }

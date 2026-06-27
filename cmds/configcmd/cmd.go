@@ -46,10 +46,12 @@ func New() *redant.Command {
 					case "local":
 						if pathutil.IsNotExist(configs.GetLocalEnvPath()) {
 							file := assert.Exit1(os.Create(configs.GetLocalEnvPath()))
-							defer file.Close()
+							defer func() { _ = file.Close() }()
 							for name, cfg := range config.LoadEnvMap(configs.GetConfigPath()) {
 								envData := strutil.FirstNotEmpty(cfg.Value, cfg.Default, "")
-								fmt.Fprintln(file, fmt.Sprintf(`%s=%q`, name, envData))
+								if _, err := fmt.Fprintf(file, "%s=%q\n", name, envData); err != nil {
+									return err
+								}
 							}
 						}
 						utils.Edit(configs.GetLocalEnvPath())

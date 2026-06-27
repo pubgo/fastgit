@@ -7,39 +7,39 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v6"
-	. "github.com/go-git/go-git/v6/_examples"
+	examples "github.com/go-git/go-git/v6/_examples"
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 // Basic example of how to commit changes to the current branch to an existing
 // repository.
 func main() {
-	CheckArgs("<directory>")
+	examples.CheckArgs("<directory>")
 	directory := os.Args[1]
 
 	// Opens an already existing repository.
 	r, err := git.PlainOpen(directory)
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	w, err := r.Worktree()
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	// ... we need a file to commit so let's create a new file inside of the
 	// worktree of the project using the go standard library.
-	Info("echo \"hello world!\" > example-git-file")
+	examples.Info("echo \"hello world!\" > example-git-file")
 	filename := filepath.Join(directory, "example-git-file")
 	err = os.WriteFile(filename, []byte("hello world!"), 0644)
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	// Adds the new file to the staging area.
-	Info("git add example-git-file")
+	examples.Info("git add example-git-file")
 	_, err = w.Add("example-git-file")
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	// We can verify the current status of the worktree using the method Status.
-	Info("git status --porcelain")
+	examples.Info("git status --porcelain")
 	status, err := w.Status()
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	fmt.Println(status)
 
@@ -47,7 +47,7 @@ func main() {
 	// just created. We should provide the object.Signature of Author of the
 	// commit Since version 5.0.1, we can omit the Author signature, being read
 	// from the git config files.
-	Info("git commit -m \"example go-git commit\"")
+	examples.Info("git commit -m \"example go-git commit\"")
 	commit, err := w.Commit("example go-git commit", &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  "John Doe",
@@ -56,12 +56,12 @@ func main() {
 		},
 	})
 
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	// Prints the current HEAD to verify that all worked well.
-	Info("git show -s")
+	examples.Info("git show -s")
 	obj, err := r.CommitObject(commit)
-	CheckIfError(err)
+	examples.CheckIfError(err)
 
 	fmt.Println(obj)
 }

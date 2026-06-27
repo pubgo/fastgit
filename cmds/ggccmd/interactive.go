@@ -227,7 +227,7 @@ func (m *interactiveModel) View() string {
 
 	if m.mode == modeSearch {
 		b.WriteString("Mode: SEARCH\n")
-		b.WriteString(fmt.Sprintf("Query: %s\n\n", m.query))
+		_, _ = fmt.Fprintf(&b, "Query: %s\n\n", m.query)
 
 		if len(m.filtered) == 0 {
 			b.WriteString("(no matched commands)\n")
@@ -241,7 +241,7 @@ func (m *interactiveModel) View() string {
 				if idx == m.cursor {
 					prefix = "> "
 				}
-				b.WriteString(fmt.Sprintf("%s%-28s %s\n", prefix, entry.Usage, entry.Description))
+				_, _ = fmt.Fprintf(&b, "%s%-28s %s\n", prefix, entry.Usage, entry.Description)
 			}
 		}
 	} else {
@@ -251,9 +251,9 @@ func (m *interactiveModel) View() string {
 			if i == m.activeWF {
 				prefix = "> "
 			}
-			b.WriteString(fmt.Sprintf("%sworkflow-%d (%d steps)\n", prefix, i+1, len(wf)))
+			_, _ = fmt.Fprintf(&b, "%sworkflow-%d (%d steps)\n", prefix, i+1, len(wf))
 			for _, step := range wf {
-				b.WriteString("    - " + step + "\n")
+				_, _ = fmt.Fprintf(&b, "    - %s\n", step)
 			}
 		}
 	}

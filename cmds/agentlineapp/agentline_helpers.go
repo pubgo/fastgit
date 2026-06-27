@@ -48,6 +48,9 @@ func loadHistory(path string) []string {
 		}
 		out = append(out, line)
 	}
+	if err := s.Err(); err != nil {
+		return out
+	}
 	return out
 }
 

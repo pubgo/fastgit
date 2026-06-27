@@ -263,13 +263,17 @@ func (m *DevManager) Stop() error {
 	defer m.serversMu.RUnlock()
 
 	// 停止所有服务
-	for _, server := range m.servers {
-		server.Stop()
+	for name, server := range m.servers {
+		if err := server.Stop(); err != nil {
+			log.Error().Err(err).Msgf("停止服务 %s 失败", name)
+		}
 	}
 
 	// 停止 Web 服务器
 	if m.httpServer != nil {
-		m.httpServer.Shutdown(context.Background())
+		if err := m.httpServer.Shutdown(context.Background()); err != nil {
+			log.Error().Err(err).Msg("停止 Web 服务器失败")
+		}
 	}
 
 	return nil
@@ -306,7 +310,9 @@ func (s *DevServer) Stop() error {
 	close(s.stopCh)
 
 	if s.watcher != nil {
-		s.watcher.Close()
+		if err := s.watcher.Close(); err != nil {
+			log.Debug().Err(err).Msgf("关闭监控器失败: %s", s.name)
+		}
 	}
 
 	s.stopProcess()
@@ -339,7 +345,9 @@ func (s *DevServer) watchFiles() {
 						}
 					}
 					if !shouldIgnore {
-						s.watcher.Add(event.Name)
+						if err := s.watcher.Add(event.Name); err != nil {
+							s.addLog("error", fmt.Sprintf("添加监控目录失败: %v", err))
+						}
 					}
 				}
 			}
@@ -511,8 +519,12 @@ func (s *DevServer) restartProcess() {
 func (s *DevServer) stopProcess() {
 	if s.cmd != nil && s.cmd.Process != nil {
 		s.addLog("info", "停止进程")
-		s.cmd.Process.Kill()
-		s.cmd.Wait()
+		if err := s.cmd.Process.Kill(); err != nil {
+			s.addLog("error", fmt.Sprintf("终止进程失败: %v", err))
+		}
+		if err := s.cmd.Wait(); err != nil {
+			s.addLog("error", fmt.Sprintf("等待进程退出失败: %v", err))
+		}
 		s.cmd = nil
 	}
 	s.status = "stopped"
@@ -609,7 +621,7 @@ func (m *DevManager) handleWebSocketToGRPC(w http.ResponseWriter, r *http.Reques
 		m.writeTranscodeError(w, http.StatusBadRequest, "websocket->grpc", err, "")
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -749,7 +761,7 @@ func (m *DevManager) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(indexHTML))
+	_, _ = w.Write([]byte(indexHTML))
 }
 
 func (m *DevManager) handleServices(w http.ResponseWriter, r *http.Request) {
@@ -771,7 +783,7 @@ func (m *DevManager) handleServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(services)
+	_ = json.NewEncoder(w).Encode(services)
 }
 
 func (m *DevManager) getServer(name string) *DevServer {
@@ -800,7 +812,7 @@ func (m *DevManager) handleConfig(w http.ResponseWriter, r *http.Request) {
 		s.mu.RUnlock()
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(cfg)
+		_ = json.NewEncoder(w).Encode(cfg)
 
 	case "POST", "PUT":
 		var cfg ServiceConfig
@@ -842,7 +854,7 @@ func (m *DevManager) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 		s.addLog("info", "配置已更新")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -868,7 +880,7 @@ func (m *DevManager) handleLogs(w http.ResponseWriter, r *http.Request) {
 	s.logsMu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(logs)
+	_ = json.NewEncoder(w).Encode(logs)
 }
 
 func (m *DevManager) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -890,7 +902,7 @@ func (m *DevManager) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":       status,
 		"last_restart": lastRestart,
 	})
@@ -917,7 +929,7 @@ func (m *DevManager) handleRestart(w http.ResponseWriter, r *http.Request) {
 	s.restartCh <- struct{}{}
 	s.addLog("info", "手动重启请求")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (m *DevManager) handleStop(w http.ResponseWriter, r *http.Request) {
@@ -941,7 +953,7 @@ func (m *DevManager) handleStop(w http.ResponseWriter, r *http.Request) {
 	s.stopProcess()
 	s.addLog("info", "手动停止请求")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // handleService 处理服务的创建、更新、删除
@@ -970,7 +982,7 @@ func (m *DevManager) handleService(w http.ResponseWriter, r *http.Request) {
 				// 更新或创建服务器实例
 				m.updateOrCreateServer(&cfg)
 				w.WriteHeader(http.StatusOK)
-				json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已更新"})
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已更新"})
 				return
 			}
 		}
@@ -983,7 +995,7 @@ func (m *DevManager) handleService(w http.ResponseWriter, r *http.Request) {
 		m.updateOrCreateServer(&cfg)
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已创建"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已创建"})
 
 	case "DELETE": // 删除服务
 		serviceName := r.URL.Query().Get("name")
@@ -1011,13 +1023,15 @@ func (m *DevManager) handleService(w http.ResponseWriter, r *http.Request) {
 		// 停止并删除服务器实例
 		m.serversMu.Lock()
 		if server, exists := m.servers[serviceName]; exists {
-			server.Stop()
+			if err := server.Stop(); err != nil {
+				log.Error().Err(err).Msgf("停止服务 %s 失败", serviceName)
+			}
 			delete(m.servers, serviceName)
 		}
 		m.serversMu.Unlock()
 
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已删除"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "服务已删除"})
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1037,7 +1051,9 @@ func (m *DevManager) updateOrCreateServer(cfg *ServiceConfig) {
 
 		// 如果服务被禁用，停止它
 		if !cfg.Enabled {
-			server.Stop()
+			if err := server.Stop(); err != nil {
+				log.Error().Err(err).Msgf("停止服务 %s 失败", cfg.Name)
+			}
 		}
 	} else if cfg.Enabled {
 		// 创建新服务器实例
@@ -1079,5 +1095,5 @@ func (m *DevManager) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "配置已保存到文件"})
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "配置已保存到文件"})
 }

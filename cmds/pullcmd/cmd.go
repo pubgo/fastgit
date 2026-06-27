@@ -17,10 +17,6 @@ import (
 	"mvdan.cc/sh/v3/shell"
 )
 
-type cmdParams struct {
-	OpenaiClient *utils.OpenaiClient
-}
-
 func New() *redant.Command {
 	var flagData = new(struct {
 		pullAll bool
@@ -93,13 +89,6 @@ func New() *redant.Command {
 	}
 
 	return app
-}
-
-func shouldPullDueToRemoteUpdate(msg string) bool {
-	return strings.Contains(msg, "stale info") ||
-		strings.Contains(msg, "[rejected]") ||
-		strings.Contains(msg, "failed to push") ||
-		strings.Contains(msg, "remote rejected")
 }
 
 func pullCurrentBranch(ctx context.Context, branch string) error {
@@ -244,5 +233,5 @@ func informUserToAmendAndPush() {
 	fmt.Println("----------------------------------------")
 
 	fmt.Println("\nPress Enter after you're done...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
+	_, _ = bufio.NewReader(os.Stdin).ReadBytes('\n')
 }
