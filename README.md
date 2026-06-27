@@ -1,6 +1,13 @@
 # fastgit
 agentic git commit generate tool
 
+## Documentation
+
+- 文档索引：`docs/INDEX.md`
+- 架构文档：`docs/architecture.md`
+- 功能文档：`docs/features.md`
+- Copilot DCOS：`docs/copilot-dcos.md`
+
 ## Command Overview
 - `fastgit commit`: AI 提交流程（保留原行为）
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
