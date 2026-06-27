@@ -6,9 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
-	copilot "github.com/github/copilot-sdk/go"
+	"github.com/pubgo/fastgit/pkg/aiprovider"
+	"github.com/pubgo/fastgit/pkg/copilotperm"
 	"github.com/pubgo/redant"
 )
 
@@ -22,6 +22,7 @@ type draftCopilotOptions struct {
 	ReasoningEffort string
 	Streaming       bool
 	AutoUserAnswer  string
+	PermissionMode  string
 }
 
 func buildDraftPrompt(ctx context.Context, repoRoot, requestedBase string) (string, string, error) {
@@ -121,85 +122,25 @@ func emptyAsNone(text string) string {
 }
 
 func runDraftWithCopilot(ctx context.Context, inv *redant.Invocation, prompt string, opts draftCopilotOptions) error {
-	client := copilot.NewClient(&copilot.ClientOptions{
+	cfg := aiprovider.CopilotConfig{
 		CLIPath:         strings.TrimSpace(opts.CLIPath),
 		LogLevel:        defaultString(strings.TrimSpace(opts.LogLevel), "error"),
-		Cwd:             strings.TrimSpace(opts.WorkingDir),
+		WorkingDir:      strings.TrimSpace(opts.WorkingDir),
 		GitHubToken:     strings.TrimSpace(opts.GitHubToken),
-		UseLoggedInUser: copilot.Bool(opts.UseLoggedInUser),
-		AutoStart:       copilot.Bool(false),
-	})
-
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start copilot client: %w", err)
+		UseLoggedInUser: opts.UseLoggedInUser,
+		Model:           defaultString(strings.TrimSpace(opts.Model), "gpt-5"),
+		ReasoningEffort: defaultString(strings.TrimSpace(opts.ReasoningEffort), "medium"),
+		PermissionMode:  defaultString(strings.TrimSpace(opts.PermissionMode), string(copilotperm.ModeDeny)),
+		AutoUserAnswer:  defaultString(strings.TrimSpace(opts.AutoUserAnswer), "继续执行"),
+		Streaming:       opts.Streaming,
 	}
-	defer func() { _ = client.Stop() }()
 
-	session, err := client.CreateSession(ctx, &copilot.SessionConfig{
-		Model:               defaultString(strings.TrimSpace(opts.Model), "gpt-5"),
-		ReasoningEffort:     defaultString(strings.TrimSpace(opts.ReasoningEffort), "medium"),
-		WorkingDirectory:    strings.TrimSpace(opts.WorkingDir),
-		Streaming:           opts.Streaming,
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
-		OnUserInputRequest: func(request copilot.UserInputRequest, invocation copilot.UserInputInvocation) (copilot.UserInputResponse, error) {
-			_, _ = fmt.Fprintf(inv.Stdout, "[ask_user] session=%s question=%s\n", invocation.SessionID, request.Question)
-			answer := defaultString(strings.TrimSpace(opts.AutoUserAnswer), "继续执行")
-			return copilot.UserInputResponse{Answer: answer, WasFreeform: true}, nil
-		},
-	})
+	err := aiprovider.RunCopilotSession(ctx, cfg, prompt, aiprovider.SessionCallbacks{Stdout: inv.Stdout})
 	if err != nil {
-		return fmt.Errorf("create copilot session: %w", err)
-	}
-	defer func() { _ = session.Disconnect() }()
-
-	_, _ = fmt.Fprintf(inv.Stdout, "session=%s\n", session.SessionID)
-
-	done := make(chan struct{}, 1)
-	errCh := make(chan error, 1)
-	unsub := session.On(func(event copilot.SessionEvent) {
-		switch event.Type {
-		case "assistant.message_delta", "assistant.reasoning_delta":
-			if opts.Streaming && event.Data.DeltaContent != nil {
-				_, _ = fmt.Fprint(inv.Stdout, *event.Data.DeltaContent)
-			}
-		case "assistant.message":
-			if event.Data.Content != nil {
-				if opts.Streaming {
-					_, _ = fmt.Fprintln(inv.Stdout)
-				}
-				_, _ = fmt.Fprintf(inv.Stdout, "assistant: %s\n", *event.Data.Content)
-			}
-		case "session.error":
-			if event.Data.Message != nil {
-				select {
-				case errCh <- fmt.Errorf("session error: %s", *event.Data.Message):
-				default:
-				}
-			}
-		case "session.idle":
-			select {
-			case done <- struct{}{}:
-			default:
-			}
-		}
-	})
-	defer unsub()
-
-	if _, err := session.Send(ctx, copilot.MessageOptions{Prompt: prompt}); err != nil {
-		return fmt.Errorf("send draft prompt: %w", err)
-	}
-
-	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	select {
-	case <-done:
-		_, _ = fmt.Fprintln(inv.Stdout, "draft completed: .version/changelog/Unreleased.md")
-		return nil
-	case err := <-errCh:
 		return err
-	case <-waitCtx.Done():
-		return fmt.Errorf("wait session idle: %w", waitCtx.Err())
 	}
+	_, _ = fmt.Fprintln(inv.Stdout, "draft completed: .version/changelog/Unreleased.md")
+	return nil
 }
 
 func defaultString(value, fallback string) string {

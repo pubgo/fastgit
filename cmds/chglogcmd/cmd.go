@@ -84,6 +84,7 @@ func newDraftCommand() *redant.Command {
 		reasoningEffort string
 		streaming       bool
 		autoUserAnswer  string
+		permissionMode  string
 	)
 
 	return &redant.Command{
@@ -101,6 +102,7 @@ func newDraftCommand() *redant.Command {
 			{Flag: "reasoning-effort", Description: "推理强度(low/medium/high/xhigh)", Value: redant.StringOf(&reasoningEffort), Default: "medium"},
 			{Flag: "stream", Description: "启用流式输出", Value: redant.BoolOf(&streaming), Default: "false"},
 			{Flag: "auto-user-answer", Description: "ask_user 触发时自动回答内容", Value: redant.StringOf(&autoUserAnswer), Default: "继续执行"},
+			{Flag: "permission-mode", Description: "Copilot 权限策略 ask|allow|deny（默认 deny，需显式 allow 才自动批准写操作）", Value: redant.StringOf(&permissionMode), Default: "deny"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveExistingGitRepo(strings.TrimSpace(repoPath))
@@ -140,6 +142,7 @@ func newDraftCommand() *redant.Command {
 				ReasoningEffort: strings.TrimSpace(reasoningEffort),
 				Streaming:       streaming,
 				AutoUserAnswer:  strings.TrimSpace(autoUserAnswer),
+				PermissionMode:  strings.TrimSpace(permissionMode),
 			})
 		},
 	}

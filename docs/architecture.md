@@ -17,6 +17,10 @@
 - AI 生成提交信息（`fastgit commit`）
 - changelog 维护与发布落版（`fastgit changelog *`）
 - Copilot 会话集成（`fastgit copilot *`）
+- PR 闭环（`fastgit pr *`）
+- 质量门禁（`fastgit check *`）
+- 冲突助手（`fastgit conflict *`）
+- 团队仓库规则（`.fastgit/` + `fastgit team *`）
 - 常见 Git 工作流封装（`pull/push/tag/worktree/ggc`）
 
 不在本项目内实现的能力：
@@ -49,7 +53,11 @@ flowchart TD
 - `bootstrap/`：应用装配层（命令注册、中间件、初始化配置、DI 注入）。
 - `cmds/`：命令实现层，每个子目录对应一个命令域。
 - `utils/`：通用基础能力（git shell、prompt 生成、OpenAI client、github release 等）。
-- `pkg/`：可复用领域组件（如 `agentline`、`skills`）。
+- `pkg/aiprovider`：OpenAI / Copilot / fallback 统一接口
+- `pkg/copilotperm`：Copilot 权限策略与 agentline broker
+- `pkg/gitconflict`：冲突文件分组与摘要
+- `pkg/workflow`：命令链记忆与 next-step 推荐
+- `pkg/repoconfig`：`.fastgit` 团队规则加载与校验
 - `configs/`：配置模板与配置路径解析。
 
 ---
@@ -66,8 +74,8 @@ flowchart TD
 `bootstrap.Main()` 注册当前主命令：
 
 - `version / init / upgrade / tag / ssh-login / history / ggc`
-- `commit / config / docs / pull / push / worktree`
-- `changelog / copilot`
+- `commit / check / conflict / pr / team / config / docs`
+- `pull / push / worktree / changelog / copilot`
 
 ### 3.3 全局中间件
 
@@ -84,13 +92,14 @@ flowchart TD
 
 ## 4. 配置体系
 
-配置由三层组成：
+配置由多层组成：
 
 1. 全局配置：`~/.config/fastgit/config.yaml`
 2. 全局环境模板：`~/.config/fastgit/env.yaml`
 3. 仓库本地覆盖：`<repo>/.git/fastgit.env`
+4. 仓库团队规则：`<repo>/.fastgit/policy.yaml`、`<repo>/.fastgit/commit.yaml`
 
-路径来源：`configs/config.go`（基于 XDG + 当前仓库根目录）。
+工作流记忆：`~/.config/fastgit/workflow.yaml`（记录命令转移频率，用于 next-step 推荐）
 
 初始化触发点：
 

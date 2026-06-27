@@ -61,6 +61,7 @@ func New() *redant.Command {
 		hydrateSessions  bool
 		hydrateTimeout   string
 		hydrateMaxEvents int64
+		permissionMode   string
 	)
 
 	rootCmd := &redant.Command{
@@ -95,6 +96,7 @@ func New() *redant.Command {
 			{Flag: "enable-demo-echo-tool", Description: "启用内置 demo_echo 工具", Value: redant.BoolOf(&enableDemoEchoTool), Default: "false"},
 			{Flag: "enable-skills-tool", Description: "启用内置 skills_tool function call", Value: redant.BoolOf(&enableSkillsTool), Default: "true"},
 			{Flag: "enable-infinite-sessions", Description: "启用 Infinite Sessions", Value: redant.BoolOf(&enableInfiniteSession), Default: "true"},
+			{Flag: "permission-mode", Description: "Copilot 权限策略 ask|allow|deny", Value: redant.StringOf(&permissionMode), Default: "ask"},
 		},
 	}
 
@@ -153,7 +155,7 @@ func New() *redant.Command {
 						DisabledSkills:      resolved.Advanced.DisabledSkills,
 						InfiniteSessions:    resolved.Advanced.InfiniteSessions,
 						Streaming:           resolved.Streaming,
-						OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+						OnPermissionRequest: buildPermissionHandler(permissionMode),
 						OnUserInputRequest:  buildUserInputHandler(inv, autoUserAnswer),
 					})
 					if err != nil {
@@ -181,7 +183,7 @@ func New() *redant.Command {
 					SkillDirectories:   resolved.Advanced.SkillDirectories,
 					DisabledSkills:     resolved.Advanced.DisabledSkills,
 					InfiniteSessions:   resolved.Advanced.InfiniteSessions,
-					PermissionApproval: true,
+					PermissionMode:     permissionMode,
 				}, inv)
 				if err != nil {
 					return err
@@ -246,7 +248,7 @@ func New() *redant.Command {
 					SkillDirectories:   resolved.Advanced.SkillDirectories,
 					DisabledSkills:     resolved.Advanced.DisabledSkills,
 					InfiniteSessions:   resolved.Advanced.InfiniteSessions,
-					PermissionApproval: true,
+					PermissionMode:     permissionMode,
 				}, inv)
 				if err != nil {
 					return err
@@ -277,9 +279,10 @@ func New() *redant.Command {
 				}
 
 				hydrateCfg := hydrateConfig{
-					enabled:   hydrateSessions,
-					timeout:   parseDurationOrDefault(hydrateTimeout, 4*time.Second),
-					maxEvents: int(hydrateMaxEvents),
+					enabled:        hydrateSessions,
+					timeout:        parseDurationOrDefault(hydrateTimeout, 4*time.Second),
+					maxEvents:      int(hydrateMaxEvents),
+					permissionMode: permissionMode,
 				}
 
 				onlyIDCount := 0
@@ -1123,7 +1126,7 @@ type resumeOptions struct {
 	SkillDirectories   []string
 	DisabledSkills     []string
 	InfiniteSessions   *copilot.InfiniteSessionConfig
-	PermissionApproval bool
+	PermissionMode     string
 }
 
 func ensureSession(ctx context.Context, client *copilot.Client, sid string, opts resumeOptions, inv *redant.Invocation) (*copilot.Session, error) {
@@ -1153,9 +1156,7 @@ func ensureSession(ctx context.Context, client *copilot.Client, sid string, opts
 			opts.AutoUserAnswer,
 		),
 	}
-	if opts.PermissionApproval {
-		resumeCfg.OnPermissionRequest = copilot.PermissionHandler.ApproveAll
-	}
+	resumeCfg.OnPermissionRequest = buildPermissionHandler(opts.PermissionMode)
 
 	s, err := client.ResumeSession(ctx, strings.TrimSpace(sid), resumeCfg)
 	if err != nil {
@@ -1352,9 +1353,10 @@ func withDefault(v, fallback string) string {
 }
 
 type hydrateConfig struct {
-	enabled   bool
-	timeout   time.Duration
-	maxEvents int
+	enabled        bool
+	timeout        time.Duration
+	maxEvents      int
+	permissionMode string
 }
 
 type hydrateSessionInfo struct {
@@ -1429,7 +1431,7 @@ func hydrateSession(ctx context.Context, client *copilot.Client, sessionID strin
 	defer cancel()
 
 	session, err := client.ResumeSession(rctx, sessionID, &copilot.ResumeSessionConfig{
-		OnPermissionRequest: copilot.PermissionHandler.ApproveAll,
+		OnPermissionRequest: buildPermissionHandler(cfg.permissionMode),
 		DisableResume:       true,
 	})
 	if err != nil {

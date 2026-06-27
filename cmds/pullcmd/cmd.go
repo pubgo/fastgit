@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/pubgo/fastgit/utils"
+	"github.com/pubgo/fastgit/pkg/gitconflict"
+	"github.com/pubgo/fastgit/pkg/workflow"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
 	"github.com/pubgo/funk/v2/result"
@@ -77,13 +79,14 @@ func New() *redant.Command {
 
 			err := pullCurrentBranch(ctx, utils.GetBranchName())
 			if err != nil {
-				if isMergeConflict() {
-					handleMergeConflict()
+				if gitconflict.HasConflicts(ctx, "") {
+					handleMergeConflict(ctx)
+					workflow.PrintRecommendations(os.Stdout, "pull")
 					return nil
-				} else {
-					return err
 				}
+				return err
 			}
+			workflow.PrintRecommendations(os.Stdout, "pull")
 			return
 		},
 	}
@@ -151,9 +154,14 @@ func isMergeConflict() bool {
 	return len(strings.TrimSpace(string(output))) > 0
 }
 
-// 处理合并冲突：打开编辑器让用户解决
-func handleMergeConflict() {
-	fmt.Println("❌ Merge conflicts detected! Please resolve them.")
+// 处理合并冲突：输出摘要并打开编辑器
+func handleMergeConflict(ctx context.Context) {
+	snap, err := gitconflict.BuildSnapshot(ctx, "")
+	if err != nil {
+		fmt.Printf("conflict summary error: %v\n", err)
+	} else {
+		fmt.Println(snap.Summary)
+	}
 
 	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
 	output, _ := cmd.Output()

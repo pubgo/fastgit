@@ -14,9 +14,12 @@ import (
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
-	"github.com/sashabaranov/go-openai"
 	"github.com/yarlson/tap"
 
+	"github.com/pubgo/fastgit/pkg/aiprovider"
+	"github.com/pubgo/fastgit/pkg/gitconflict"
+	"github.com/pubgo/fastgit/pkg/repoconfig"
+	"github.com/pubgo/fastgit/pkg/workflow"
 	"github.com/pubgo/fastgit/utils"
 )
 
@@ -32,8 +35,8 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		if shouldPullDueToRemoteUpdate(res) {
 			err := gitPull()
 			if err != nil {
-				if isMergeConflict() {
-					handleMergeConflict()
+				if gitconflict.HasConflicts(ctx, "") {
+					handleMergeConflict(ctx)
 				} else {
 					os.Exit(1)
 				}
@@ -67,6 +70,10 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		assert.Must(utils.ShellExec(ctx, "git", "add", "-A"))
 		res := utils.ShellExecOutput(ctx, "git", "status").Unwrap()
 
+		if err := runPreCommitCheck(ctx, mustRepoRoot(), flags.skipCheck); err != nil {
+			return err
+		}
+
 		if !flags.amend {
 			assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
 		} else {
@@ -77,12 +84,15 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 			}
 		}
 
+		if err := ensurePushPolicy(mustRepoRoot(), utils.GetBranchName(), flags.overridePolicy); err != nil {
+			return err
+		}
 		res = utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
 		if shouldPullDueToRemoteUpdate(res) {
 			err := gitPull()
 			if err != nil {
-				if isMergeConflict() {
-					handleMergeConflict()
+				if gitconflict.HasConflicts(ctx, "") {
+					handleMergeConflict(ctx)
 				} else {
 					os.Exit(1)
 				}
@@ -119,6 +129,18 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		return nil
 	}
 
+	repoRoot := mustRepoRoot()
+	if err := runPreCommitCheck(ctx, repoRoot, flags.skipCheck); err != nil {
+		return err
+	}
+
+	repoCfg, _ := repoconfig.Load(repoRoot)
+	for _, file := range diffResult.Files {
+		if repoCfg.MatchesSensitivePath(file) {
+			log.Warn().Str("file", file).Msg("sensitive path staged — review carefully")
+		}
+	}
+
 	log.Info().Msg(utils.GetDetectedMessage(diffResult.Files))
 	for _, file := range diffResult.Files {
 		log.Info().Msg("file: " + file)
@@ -128,43 +150,96 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		s.Prefix = "generate git message: "
 	})
 	s.Start()
-	generatePrompt := utils.GeneratePrompt("en", 50, utils.ConventionalCommitType)
-	resp, err := params.OpenaiClient.Client.CreateChatCompletion(
-		ctx,
-		openai.ChatCompletionRequest{
-			Model: params.OpenaiClient.Cfg.Model,
-			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: generatePrompt},
-				{Role: openai.ChatMessageRoleUser, Content: diffResult.Diff},
-			},
-		},
-	)
-	s.Stop()
-
-	if err != nil {
-		log.Err(err).Msg("failed to call openai")
-		return errors.WrapCaller(err)
+	locale := "en"
+	maxLength := 50
+	if repoCfg.Commit.Locale != "" {
+		locale = repoCfg.Commit.Locale
 	}
-
-	if len(resp.Choices) == 0 {
-		return nil
+	if repoCfg.Commit.MaxLength > 0 {
+		maxLength = repoCfg.Commit.MaxLength
 	}
+	generatePrompt := utils.GeneratePrompt(locale, maxLength, utils.ConventionalCommitType)
 
-	msg := strings.TrimSpace(tap.Text(ctx, tap.TextOptions{
-		Message:      "git message(update or enter):",
-		InitialValue: resp.Choices[0].Message.Content,
-		DefaultValue: resp.Choices[0].Message.Content,
-		Placeholder:  "update or enter",
-	}))
+	var msg string
+	if flags.candidates {
+		candidates, err := aiprovider.GenerateCommitCandidates(ctx, params.AI, diffResult.Diff)
+		s.Stop()
+		if err != nil {
+			log.Err(err).Msg("failed to generate commit candidates")
+		}
+		if hint := aiprovider.BreakingChangeHint(diffResult.Diff); hint != "" {
+			log.Warn().Msg(hint)
+			fmt.Println(hint)
+		}
+		options := make([]tap.SelectOption[string], 0, len(candidates))
+		for _, candidate := range candidates {
+			candidate := candidate
+			options = append(options, tap.SelectOption[string]{
+				Label: aiprovider.FormatCandidateLabel(candidate),
+				Value: candidate.Message,
+			})
+		}
+		if len(options) == 0 {
+			return nil
+		}
+		selected := tap.Select[string](ctx, tap.SelectOptions[string]{
+			Message: "Pick a commit message:",
+			Options: options,
+		})
+		msg = strings.TrimSpace(selected)
+	} else {
+		aiResp, err := params.AI.Complete(ctx, aiprovider.CompleteRequest{
+			System: generatePrompt,
+			User:   diffResult.Diff,
+		})
+		s.Stop()
+
+		if err != nil {
+			log.Err(err).Msg("failed to generate commit message")
+			return errors.WrapCaller(err)
+		}
+
+		if aiResp.Fallback {
+			log.Warn().Str("provider", aiResp.Provider).Msg("using rule-based commit message fallback (AI unavailable)")
+		}
+		if hint := aiprovider.BreakingChangeHint(diffResult.Diff); hint != "" {
+			log.Warn().Msg(hint)
+			fmt.Println(hint)
+		}
+
+		msg = strings.TrimSpace(tap.Text(ctx, tap.TextOptions{
+			Message:      "git message(update or enter):",
+			InitialValue: aiResp.Text,
+			DefaultValue: aiResp.Text,
+			Placeholder:  "update or enter",
+		}))
+	}
 	if msg == "" {
 		return nil
 	}
 
+	if err := repoCfg.ValidateCommitMessage(msg); err != nil {
+		log.Warn().Err(err).Msg("commit message policy warning")
+		fmt.Printf("policy warning: %v\n", err)
+	}
+
 	assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
+	if err := ensurePushPolicy(repoRoot, utils.GetBranchName(), flags.overridePolicy); err != nil {
+		return err
+	}
 	utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
-	if flags.showPrompt {
+	if flags.showPrompt && !flags.candidates {
 		fmt.Println("\n" + generatePrompt + "\n")
 	}
-	log.Info().Any("usage", resp.Usage).Msg("openai response usage")
+	log.Info().Str("message", msg).Bool("candidates", flags.candidates).Msg("commit message generated")
+	workflow.PrintRecommendations(os.Stdout, "commit")
 	return nil
+}
+
+func mustRepoRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
 }

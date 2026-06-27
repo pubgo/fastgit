@@ -13,13 +13,18 @@ import (
 	"github.com/pubgo/funk/v2/result"
 	"github.com/pubgo/redant"
 
+	"github.com/pubgo/fastgit/pkg/aiprovider"
+	"github.com/pubgo/fastgit/pkg/gitconflict"
 	"github.com/pubgo/fastgit/utils"
 )
 
 type flagOptions struct {
-	showPrompt bool
-	fastCommit bool
-	amend      bool
+	showPrompt      bool
+	fastCommit      bool
+	amend           bool
+	candidates      bool
+	skipCheck       bool
+	overridePolicy  bool
 }
 
 type Config struct {
@@ -27,8 +32,8 @@ type Config struct {
 }
 
 type cmdParams struct {
-	OpenaiClient *utils.OpenaiClient
-	CommitCfg    []*Config
+	AI        aiprovider.Provider
+	CommitCfg []*Config
 }
 
 func New() *redant.Command {
@@ -56,6 +61,21 @@ func New() *redant.Command {
 						Flag:        "amend",
 						Description: "Amend the last commit.",
 						Value:       redant.BoolOf(&flags.amend),
+					},
+					{
+						Flag:        "candidates",
+						Description: "Generate 3 commit message candidates to pick from.",
+						Value:       redant.BoolOf(&flags.candidates),
+					},
+					{
+						Flag:        "skip-check",
+						Description: "Skip pre-commit quality check (fastgit check run --staged-only).",
+						Value:       redant.BoolOf(&flags.skipCheck),
+					},
+					{
+						Flag:        "override-policy",
+						Description: "Bypass protected branch push block from .fastgit/policy.yaml.",
+						Value:       redant.BoolOf(&flags.overridePolicy),
 					},
 				},
 				Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
@@ -95,6 +115,21 @@ func New() *redant.Command {
 				Flag:        "amend",
 				Description: "Amend the last commit.",
 				Value:       redant.BoolOf(&flags.amend),
+			},
+			{
+				Flag:        "candidates",
+				Description: "Generate 3 commit message candidates to pick from.",
+				Value:       redant.BoolOf(&flags.candidates),
+			},
+			{
+				Flag:        "skip-check",
+				Description: "Skip pre-commit quality check (fastgit check run --staged-only).",
+				Value:       redant.BoolOf(&flags.skipCheck),
+			},
+			{
+				Flag:        "override-policy",
+				Description: "Bypass protected branch push block from .fastgit/policy.yaml.",
+				Value:       redant.BoolOf(&flags.overridePolicy),
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
@@ -233,9 +268,14 @@ func isMergeConflict() bool {
 	return len(strings.TrimSpace(string(output))) > 0
 }
 
-// 处理合并冲突：打开编辑器让用户解决
-func handleMergeConflict() {
-	fmt.Println("❌ Merge conflicts detected! Please resolve them.")
+// 处理合并冲突：输出摘要并打开编辑器
+func handleMergeConflict(ctx context.Context) {
+	snap, err := gitconflict.BuildSnapshot(ctx, "")
+	if err != nil {
+		fmt.Printf("conflict summary error: %v\n", err)
+	} else {
+		fmt.Println(snap.Summary)
+	}
 
 	cmd := exec.Command("git", "diff", "--name-only", "--diff-filter=U")
 	output, _ := cmd.Output()

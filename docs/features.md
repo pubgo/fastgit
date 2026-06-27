@@ -20,10 +20,15 @@
 | 配置初始化   | `init`                 | 初始化全局配置、环境模板、仓库本地 env           |
 | 配置管理     | `config`               | 编辑/查看 `config`、`env`、`local env`           |
 | AI 提交      | `commit` / `commit ai` | 基于 diff 生成提交信息并辅助提交                 |
+| 质量门禁     | `check`                | fmt/vet/test/lint/secret 一键检查，支持 hook     |
+| PR 流程      | `pr`                   | create/status/sync/merge，依赖 gh CLI            |
+| 冲突处理     | `conflict`             | 冲突分组摘要、列表、打开文件                     |
+| 团队治理     | `team`                 | 初始化/校验 `.fastgit` 仓库规则                  |
+| 本地评审     | `review`               | staged diff 结构化 review（AI + fallback）       |
 | 变更记录     | `changelog`            | 初始化模板、草拟 Unreleased、发布落版            |
 | 文档模板     | `docs init`            | 初始化文档 prompt/instruction 模板               |
 | 同步拉取     | `pull`                 | 拉取当前分支，支持 `--all`、`--hard`             |
-| 推送发布     | `push`                 | 推送当前分支，支持 `--all`、`--force-with-lease` |
+| 推送发布     | `push`                 | 推送当前分支；保护分支策略阻断；`--override-policy` |
 | 标签发布     | `tag`                  | 生成并推送 tag，支持列表与交互选择               |
 | 工作树       | `worktree`             | 创建/删除/查看多工作树并行开发                   |
 | 统一命令面   | `ggc`                  | 统一 git 子命令 + 交互 workflow + alias          |
@@ -46,11 +51,88 @@
 
 - 提示词由 `utils.GeneratePrompt()` 统一生成
 - 默认限制提交信息风格与长度
-- 支持 `--amend`、`--fast` 等模式
+- 支持 `--amend`、`--fast`、`--candidates`、`--skip-check`、`--override-policy`
+- 提交前默认运行 `check run --staged-only`（可用 `--skip-check` 跳过）
+- 读取 `.fastgit/commit.yaml`（locale、max_length、require_scope）
+- push 前校验 `.fastgit/policy.yaml` 保护分支
+- 完成后推荐下一步（如 `push` → `pr create`）
 
 ---
 
-### 2.2 Changelog 流程（`fastgit changelog`）
+### 2.2 质量门禁（`fastgit check`）
+
+子命令：
+
+- `run`：执行 fmt / vet / test / lint / secrets 流水线
+- `run --dry-run`：预览将执行的步骤，不改动仓库
+- `run --staged-only`：仅检查 staged 文件（fmt 限定到 staged `.go`）
+- `run --fix`：对可修复项先修复（如 `gofmt -w`）
+- `config`：展示当前门禁步骤
+- `hook install|uninstall`：安装/卸载 pre-commit 钩子
+
+适用场景：
+
+- commit 前本地自检
+- 与 CI 对齐的本地门禁
+
+---
+
+### 2.3 Pull Request 流程（`fastgit pr`）
+
+子命令：
+
+- `create`：从 git log/diff 生成 PR 标题与正文（Summary / Risk / Test plan / Rollback）
+- `create --dry-run`：只预览，不调用 `gh`
+- `create --ai`：用 AI 润色标题与正文（失败时保留规则版）
+- `create --ai-provider=auto|openai|copilot`：选择 AI 提供方
+- `status`：查看当前分支 PR 状态（需 `gh`）
+- `sync`：rebase 到 base 并 `push --force-with-lease`
+- `sync --update-body`：sync 后重新生成并更新 PR 正文
+- `sync --update-body --ai`：更新时用 AI 润色
+- `merge`：合并 PR（默认 squash）
+
+依赖：`gh` CLI 已安装并登录；分支需有 upstream。
+
+---
+
+### 2.4 冲突助手（`fastgit conflict`）
+
+子命令：
+
+- `summary`（默认）：按模块分组输出冲突文件与处理建议
+- `list`：列出冲突文件
+- `open`：在 `$EDITOR` 中打开全部冲突文件
+
+`pull` / `commit` 检测到冲突时也会自动输出摘要。
+
+---
+
+### 2.5 团队治理（`fastgit team`）
+
+仓库级配置目录：`.fastgit/`
+
+- `team init`：生成 `policy.yaml` + `commit.yaml` 模板
+- `team validate --branch` / `--message`：校验分支名与 commit message
+
+`policy.yaml` 控制：分支命名、保护分支、conventional commit、敏感路径。  
+`commit.yaml` 控制：AI commit 的 locale、长度、scope 要求。
+
+`check` / `commit` / `pr create` 会读取这些规则并给出 warning。  
+`push` 与 `commit` 对 `protected_branches`（如 main/master）硬阻断，可用 `--override-policy` 跳过。
+
+---
+
+### 2.6 本地代码评审（`fastgit review`）
+
+- `review staged`：对 staged diff 输出 Blockers / Suggestions / Nits / Test plan
+- `review staged --dry-run`：预览将评审的内容
+- `review staged --ai-provider=auto|openai|copilot`：选择 AI 提供方（不可用时规则 fallback）
+
+适用场景：PR 创建前自检、敏感改动二次确认。
+
+---
+
+### 2.7 Changelog 流程（`fastgit changelog`）
 
 子命令：
 
@@ -65,7 +147,7 @@
 
 ---
 
-### 2.3 Copilot 会话（`fastgit copilot`）
+### 2.8 Copilot 会话（`fastgit copilot`）
 
 支持能力：
 
@@ -83,7 +165,7 @@
 
 ---
 
-### 2.4 统一 Git 命令面（`fastgit ggc`）
+### 2.9 统一 Git 命令面（`fastgit ggc`）
 
 `ggc` 提供统一命令入口与交互检索：
 
@@ -95,7 +177,7 @@
 
 ---
 
-### 2.5 工作树并行开发（`fastgit worktree`）
+### 2.10 工作树并行开发（`fastgit worktree`）
 
 子命令：
 

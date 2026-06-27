@@ -19,6 +19,7 @@ import (
 
 	agentacp "github.com/pubgo/fastgit/cmds/agentlineapp/acp"
 	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
+	"github.com/pubgo/fastgit/pkg/copilotperm"
 	"github.com/pubgo/redant"
 )
 
@@ -273,6 +274,7 @@ type agentlineModel struct {
 	initialArgv      []string
 	agentOnlyMode    bool
 	permissionBroker *agentacp.PermissionBroker
+	copilotPermBroker *copilotperm.Broker
 	questionBroker   *QuestionBroker
 	acpEventSeq      int64
 	acpEventEntries  []acpEventEntry
@@ -327,6 +329,7 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 		initialArgv:      append([]string(nil), initialArgv...),
 		agentOnlyMode:    agentOnlyMode,
 		permissionBroker: agentacp.NewPermissionBroker(),
+		copilotPermBroker: copilotperm.NewBroker(),
 		questionBroker:   NewQuestionBroker(),
 		blocks: []sessionBlock{{
 			Kind:  blockKindSystem,
@@ -348,6 +351,7 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 		}
 	}
 	m.recomputeSuggestions()
+	m.initCopilotPermissionBroker()
 	return m
 }
 

@@ -2,7 +2,13 @@ package pushcmd
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 
+	"github.com/pubgo/fastgit/pkg/repoconfig"
+	"github.com/pubgo/fastgit/pkg/workflow"
 	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/log"
@@ -12,8 +18,9 @@ import (
 
 func New() *redant.Command {
 	var flagData = new(struct {
-		pushAll   bool
-		pushForce bool
+		pushAll         bool
+		pushForce       bool
+		overridePolicy  bool
 	})
 
 	return &redant.Command{
@@ -29,6 +36,11 @@ func New() *redant.Command {
 				Flag:        "force",
 				Description: "force push current branch with --force-with-lease",
 				Value:       redant.BoolOf(&flagData.pushForce),
+			},
+			{
+				Flag:        "override-policy",
+				Description: "bypass protected branch push block from .fastgit/policy.yaml",
+				Value:       redant.BoolOf(&flagData.overridePolicy),
 			},
 		},
 		Handler: func(ctx context.Context, i *redant.Invocation) (gErr error) {
@@ -52,19 +64,44 @@ func New() *redant.Command {
 
 			utils.LogConfigAndBranch()
 
+			repoRoot, err := gitRepoRoot()
+			if err != nil {
+				return err
+			}
+			branch := utils.GetBranchName()
+			bundle, err := repoconfig.Load(repoRoot)
+			if err != nil {
+				return err
+			}
+			if err := bundle.ValidatePush(branch, flagData.overridePolicy); err != nil {
+				return err
+			}
+
 			if flagData.pushAll && flagData.pushForce {
 				return errors.Errorf("--force cannot be used with --all")
 			}
 
+			var pushErr error
 			if flagData.pushAll {
-				return utils.ShellExec(ctx, "git", "push", "--all", "origin")
+				pushErr = utils.ShellExec(ctx, "git", "push", "--all", "origin")
+			} else if flagData.pushForce {
+				pushErr = utils.ShellExec(ctx, "git", "push", "--force-with-lease", "--set-upstream", "origin", branch)
+			} else {
+				pushErr = utils.ShellExec(ctx, "git", "push", "--set-upstream", "origin", branch)
 			}
-
-			if flagData.pushForce {
-				return utils.ShellExec(ctx, "git", "push", "--force-with-lease", "--set-upstream", "origin", utils.GetBranchName())
+			if pushErr == nil {
+				workflow.PrintRecommendations(os.Stdout, "push")
 			}
-
-			return utils.ShellExec(ctx, "git", "push", "--set-upstream", "origin", utils.GetBranchName())
+			return pushErr
 		},
 	}
+}
+
+func gitRepoRoot() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

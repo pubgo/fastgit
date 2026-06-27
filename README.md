@@ -6,6 +6,7 @@ agentic git commit generate tool
 - 文档索引：`docs/INDEX.md`
 - 架构文档：`docs/architecture.md`
 - 功能文档：`docs/features.md`
+- 路线图文档：`docs/roadmap.md`
 - Copilot DCOS：`docs/copilot-dcos.md`
 
 ## Command Overview

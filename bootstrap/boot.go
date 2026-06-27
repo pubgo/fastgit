@@ -10,7 +10,10 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixcontext"
+	"github.com/pubgo/fastgit/cmds/checkcmd"
 	"github.com/pubgo/fastgit/cmds/chglogcmd"
+	"github.com/pubgo/fastgit/cmds/conflictcmd"
+	"github.com/pubgo/fastgit/cmds/teamcmd"
 	"github.com/pubgo/fastgit/cmds/configcmd"
 	"github.com/pubgo/fastgit/cmds/copilotcmd"
 	"github.com/pubgo/fastgit/cmds/docscmd"
@@ -18,13 +21,16 @@ import (
 	"github.com/pubgo/fastgit/cmds/ggccmd"
 	"github.com/pubgo/fastgit/cmds/historycmd"
 	"github.com/pubgo/fastgit/cmds/initcmd"
+	"github.com/pubgo/fastgit/cmds/prcmd"
 	"github.com/pubgo/fastgit/cmds/pullcmd"
 	"github.com/pubgo/fastgit/cmds/pushcmd"
+	"github.com/pubgo/fastgit/cmds/reviewcmd"
 	"github.com/pubgo/fastgit/cmds/sshcmd"
 	"github.com/pubgo/fastgit/cmds/tagcmd"
 	"github.com/pubgo/fastgit/cmds/upgradecmd"
 	"github.com/pubgo/fastgit/cmds/versioncmd"
 	"github.com/pubgo/fastgit/cmds/worktreecmd"
+	"github.com/pubgo/fastgit/pkg/aiprovider"
 	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/funk/v2/assert"
 	"github.com/pubgo/funk/v2/config"
@@ -45,6 +51,11 @@ func Main() {
 		historycmd.New(),
 		ggccmd.New(),
 		fastcommitcmd.New(),
+		checkcmd.New(),
+		conflictcmd.New(),
+		prcmd.New(),
+		reviewcmd.New(),
+		teamcmd.New(),
 		configcmd.New(),
 		docscmd.New(),
 		pullcmd.New(),
@@ -87,6 +98,7 @@ func run(cmds ...*redant.Command) {
 				di := dix.New(dix.WithValuesNull())
 				di.Provide(config.Load[configProvider])
 				di.Provide(utils.NewOpenaiClient)
+				di.Provide(aiprovider.Default)
 				return next(dixcontext.Create(ctx, di), i)
 			}
 		},

@@ -14,7 +14,8 @@ func TestNew(t *testing.T) {
 	require.Equal(t, "git push to remote origin", cmd.Short)
 	require.NotNil(t, cmd.Handler)
 
-	require.Len(t, cmd.Options, 2)
+	require.Len(t, cmd.Options, 3)
 	require.Equal(t, "all", cmd.Options[0].Flag)
 	require.Equal(t, "force", cmd.Options[1].Flag)
+	require.Equal(t, "override-policy", cmd.Options[2].Flag)
 }

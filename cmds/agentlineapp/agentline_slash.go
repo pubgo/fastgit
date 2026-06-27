@@ -170,24 +170,37 @@ var slashBuiltins = []slashBuiltin{
 		Aliases:     []string{"perm"},
 		Description: "查看待处理权限请求",
 		Handler: func(m *agentlineModel, _, _, _ string) tea.Cmd {
-			if m.permissionBroker == nil {
+			if m.permissionBroker == nil && m.copilotPermBroker == nil {
 				m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permissions", Lines: []string{"权限队列未初始化。"}})
 				return nil
 			}
-			pending := m.permissionBroker.Pending()
-			if len(pending) == 0 {
+
+			lines := make([]string, 0, 8)
+			if m.permissionBroker != nil {
+				pending := m.permissionBroker.Pending()
+				if len(pending) == 0 {
+					lines = append(lines, "ACP: 当前无待处理权限请求。")
+				}
+				for i, item := range pending {
+					lines = append(lines, fmt.Sprintf("acp %d) request=%s session=%s tool=%s", i+1, item.RequestID, strings.TrimSpace(string(item.SessionID)), strings.TrimSpace(string(item.ToolCallID))))
+					if strings.TrimSpace(item.Title) != "" {
+						lines = append(lines, "   title: "+strings.TrimSpace(item.Title))
+					}
+					for idx, option := range item.Options {
+						lines = append(lines, fmt.Sprintf("   option %d: id=%s kind=%s name=%s", idx+1, strings.TrimSpace(string(option.OptionId)), strings.TrimSpace(string(option.Kind)), strings.TrimSpace(option.Name)))
+					}
+				}
+			}
+			if m.copilotPermBroker != nil {
+				if copilotLines := m.copilotPermissionLines(); len(copilotLines) > 0 {
+					lines = append(lines, copilotLines...)
+				} else {
+					lines = append(lines, "copilot: 当前无待处理权限请求。")
+				}
+			}
+			if len(lines) == 0 {
 				m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permissions", Lines: []string{"当前无待处理权限请求。"}})
 				return nil
-			}
-			lines := make([]string, 0, len(pending)*3)
-			for i, item := range pending {
-				lines = append(lines, fmt.Sprintf("%d) request=%s session=%s tool=%s", i+1, item.RequestID, strings.TrimSpace(string(item.SessionID)), strings.TrimSpace(string(item.ToolCallID))))
-				if strings.TrimSpace(item.Title) != "" {
-					lines = append(lines, "   title: "+strings.TrimSpace(item.Title))
-				}
-				for idx, option := range item.Options {
-					lines = append(lines, fmt.Sprintf("   option %d: id=%s kind=%s name=%s", idx+1, strings.TrimSpace(string(option.OptionId)), strings.TrimSpace(string(option.Kind)), strings.TrimSpace(option.Name)))
-				}
 			}
 			m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permissions", Lines: lines})
 			return nil
@@ -607,11 +620,21 @@ func slashHelpLines(root *redant.Command, agentOnly bool) []string {
 }
 
 func resolvePermissionSlash(m *agentlineModel, allow bool, argText string) tea.Cmd {
-	if m == nil || m.permissionBroker == nil {
+	if m == nil {
 		return nil
+	}
+	parts := strings.Fields(strings.TrimSpace(argText))
+	if len(parts) > 0 && strings.HasPrefix(parts[0], "cperm_") {
+		return m.resolveCopilotPermissionSlash(allow, argText)
+	}
+	if m.permissionBroker == nil {
+		return m.resolveCopilotPermissionSlash(allow, argText)
 	}
 	pending := m.permissionBroker.Pending()
 	if len(pending) == 0 {
+		if cmd := m.resolveCopilotPermissionSlash(allow, argText); cmd != nil {
+			return cmd
+		}
 		title := "/deny"
 		if allow {
 			title = "/allow"
@@ -620,7 +643,6 @@ func resolvePermissionSlash(m *agentlineModel, allow bool, argText string) tea.C
 		return nil
 	}
 
-	parts := strings.Fields(strings.TrimSpace(argText))
 	target := pending[len(pending)-1]
 	rest := []string{}
 	if len(parts) > 0 {
