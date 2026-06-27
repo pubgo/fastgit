@@ -168,7 +168,7 @@ func TestCollectSlashCompletionItems_TypoSuggestsChat(t *testing.T) {
 
 func TestHandleSlashInput_ModeSwitch(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/output")
 	if !handled || cmd != nil {
@@ -189,7 +189,7 @@ func TestHandleSlashInput_ModeSwitch(t *testing.T) {
 
 func TestView_MouseWheelDispatchByRegion(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 100
 	m.height = 24
 	m.history = []string{"/ask one", "/ask two", "/run commit --message hi", "/plan test"}
@@ -243,7 +243,7 @@ func TestView_MouseWheelDispatchByRegion(t *testing.T) {
 
 func TestUpdate_MouseScrollMsgScrollsInputAndOutput(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 100
 	m.height = 14
 	m.history = []string{"h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8", "h9", "h10"}
@@ -271,7 +271,7 @@ func TestUpdate_MouseScrollMsgScrollsInputAndOutput(t *testing.T) {
 
 func TestView_MouseClickInputRegionFocusInput(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 100
 	m.height = 24
 	m.history = []string{"/ask one", "/ask two", "/run commit --message hi", "/plan test"}
@@ -310,7 +310,7 @@ func TestView_MouseClickInputRegionFocusInput(t *testing.T) {
 
 func TestView_MouseClickHistoryRowSelectsHistory(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 100
 	m.height = 24
 	m.history = []string{"/ask one", "/ask two", "/run commit --message hi", "/plan test"}
@@ -343,7 +343,7 @@ func TestView_MouseClickHistoryRowSelectsHistory(t *testing.T) {
 
 func TestUpdate_MouseSelectHistoryMsgFillsInput(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.history = []string{"h1", "h2", "h3"}
 	m.historyPos = len(m.history)
 	m.outputFocus = true
@@ -366,7 +366,7 @@ func TestUpdate_MouseSelectHistoryMsgFillsInput(t *testing.T) {
 
 func TestHistoryUpDownTracksSelectedHistory(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.history = []string{"h1", "h2", "h3"}
 	m.historyPos = len(m.history)
 
@@ -396,7 +396,7 @@ func TestHistoryUpDownTracksSelectedHistory(t *testing.T) {
 
 func TestRunSlashRunCmd(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	msg := runSlashRunCmd(context.Background(), m, root, "commit --message hello")()
 	res, ok := msg.(runResultMsg)
 	if !ok {
@@ -436,7 +436,7 @@ func TestRunSlashRunCmd_Canceled(t *testing.T) {
 	root := buildTestRoot()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	msg := runSlashRunCmd(ctx, m, root, "wait")()
 	res, ok := msg.(runResultMsg)
@@ -456,7 +456,7 @@ func TestRunSlashRunCmd_Canceled(t *testing.T) {
 
 func TestHandleSlashInput_CancelRunning(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	called := false
 	m.running = true
@@ -473,7 +473,7 @@ func TestHandleSlashInput_CancelRunning(t *testing.T) {
 
 func TestHandleSlashInput_FoldUnfold(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/fold")
 	if !handled || cmd != nil {
@@ -494,7 +494,7 @@ func TestHandleSlashInput_FoldUnfold(t *testing.T) {
 
 func TestHandleSlashInput_CommandAsSlash(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/commit --message hi")
 	if !handled {
@@ -511,7 +511,7 @@ func TestHandleSlashInput_CommandAsSlash(t *testing.T) {
 func TestHandleSlashInput_CommandAliasNotUsedAsSlash(t *testing.T) {
 	root := buildTestRoot()
 	root.Children[0].Aliases = []string{"ci"} // commit alias
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/ci --message hi")
 	if !handled {
@@ -527,7 +527,7 @@ func TestHandleSlashInput_CommandAliasNotUsedAsSlash(t *testing.T) {
 
 func TestHandleSlashInput_HistoryDefault(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.history = []string{"/ask one", "/run commit --message hi", "/plan release"}
 	m.outputOffset = 7
 
@@ -554,7 +554,7 @@ func TestHandleSlashInput_HistoryDefault(t *testing.T) {
 
 func TestHandleSlashInput_HistoryWithLimit(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.history = []string{"h1", "h2", "h3", "h4", "h5"}
 
 	handled, cmd := m.handleSlashInput("/history 2")
@@ -577,7 +577,7 @@ func TestHandleSlashInput_HistoryWithLimit(t *testing.T) {
 
 func TestHandleSlashInput_HistoryInvalidArg(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/history abc")
 	if !handled || cmd != nil {
@@ -595,7 +595,7 @@ func TestHandleSlashInput_HistoryInvalidArg(t *testing.T) {
 
 func TestHandleSlashInput_UnknownCommandSuggestsClosest(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/caht")
 	if !handled || cmd != nil {
@@ -629,7 +629,7 @@ func TestRenderOutputLines_FoldDetails(t *testing.T) {
 
 func TestTabOnEmptyInputShowsStarterSlashSuggestions(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	if len(m.suggestions) != 0 {
 		t.Fatalf("expected no suggestions on init empty input")
@@ -650,7 +650,7 @@ func TestTabOnEmptyInputShowsStarterSlashSuggestions(t *testing.T) {
 
 func TestEnterPlainTextShowsSimplifiedHint(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.input.SetValue("请帮我总结今天改动")
 
 	model, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -672,7 +672,7 @@ func TestEnterPlainTextShowsSimplifiedHint(t *testing.T) {
 
 func TestEnterPlainTextInChatStickyModeRunsCommand(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.input.SetValue("/chat commit")
 
 	model, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -705,7 +705,7 @@ func TestEnterPlainTextInChatStickyModeRunsCommand(t *testing.T) {
 
 func TestEnterCommandLikeInputInChatModeRunsStickyCommand(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	m.input.SetValue("/chat commit")
 	model, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -727,7 +727,7 @@ func TestEnterCommandLikeInputInChatModeRunsStickyCommand(t *testing.T) {
 
 func TestView_ShowsChatModeHintLine(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 100
 	m.height = 24
 	m.bindStickyInvocation(&stickyInvocation{BaseArgs: []string{"commit"}, PromptFlag: "--prompt"})
@@ -743,7 +743,7 @@ func TestView_ShowsChatModeHintLine(t *testing.T) {
 
 func TestView_ShowsPendingQuestionHintWhileRunning(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.width = 120
 	m.height = 28
 	m.running = true
@@ -784,7 +784,7 @@ func TestView_ShowsPendingQuestionHintWhileRunning(t *testing.T) {
 
 func TestHandleSlashInput_ChatRequiresCommand(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/chat")
 	if !handled || cmd != nil {
@@ -801,7 +801,7 @@ func TestHandleSlashInput_ChatRequiresCommand(t *testing.T) {
 
 func TestHandleSlashInput_ChatAndUnbind(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/chat commit")
 	if !handled || cmd != nil {
@@ -825,7 +825,7 @@ func TestHandleSlashInput_ChatAndUnbind(t *testing.T) {
 
 func TestHandleSlashInput_ChatSetsMode(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/chat commit")
 	if !handled || cmd != nil {
@@ -841,7 +841,7 @@ func TestHandleSlashInput_ChatSetsMode(t *testing.T) {
 
 func TestSuggestionNavigationTakesPriorityOverOutputFocus(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.outputFocus = true
 	m.input.SetValue("/")
 	m.recomputeSuggestions()
@@ -890,7 +890,7 @@ func TestIsCommandLikeInput_AgentOnlyMode(t *testing.T) {
 
 func TestNewAgentlineModel_InitWithInitialArgv(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, []string{"commit", "--message", "hello world"})
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, []string{"commit", "--message", "hello world"}, "")
 
 	cmd := m.Init()
 	if cmd == nil {

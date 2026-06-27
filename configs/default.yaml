@@ -7,5 +7,8 @@ openai:
 commit:
   gen_version: ${FASTGIT_GEN_VERSION}
 
+copilot:
+  permission_mode: ask
+
 patch_envs:
   - env.yaml

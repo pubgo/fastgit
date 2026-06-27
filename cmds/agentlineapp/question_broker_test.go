@@ -44,7 +44,7 @@ func TestQuestionBroker_RequestAndReply(t *testing.T) {
 
 func TestHandleSlashInput_QuestionsAndReply(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan AskResponse, 1)
 	go func() {
@@ -94,7 +94,7 @@ func TestHandleSlashInput_QuestionsAndReply(t *testing.T) {
 
 func TestHandleSlashInput_ReplyByIndex(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan AskResponse, 1)
 	go func() {
@@ -126,7 +126,7 @@ func TestHandleSlashInput_ReplyByIndex(t *testing.T) {
 
 func TestRunning_DirectInputAnswersPendingQuestion(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan AskResponse, 1)
 	go func() {

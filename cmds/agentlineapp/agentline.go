@@ -109,12 +109,13 @@ var (
 )
 
 type RuntimeOptions struct {
-	Prompt      string
-	HistoryFile string
-	NoHistory   bool
-	InitialArgv []string
-	Stdin       io.Reader
-	Stdout      io.Writer
+	Prompt         string
+	PermissionMode string
+	HistoryFile    string
+	NoHistory      bool
+	InitialArgv    []string
+	Stdin          io.Reader
+	Stdout         io.Writer
 }
 
 func Run(ctx context.Context, root *redant.Command, opts *RuntimeOptions) error {
@@ -148,7 +149,8 @@ func Run(ctx context.Context, root *redant.Command, opts *RuntimeOptions) error 
 		output = os.Stdout
 	}
 
-	model := newAgentlineModel(ctx, root, strings.TrimSpace(cfg.Prompt), historyLines, historyFile, !cfg.NoHistory, append([]string(nil), cfg.InitialArgv...))
+	model := newAgentlineModel(ctx, root, strings.TrimSpace(cfg.Prompt), historyLines, historyFile, !cfg.NoHistory, append([]string(nil), cfg.InitialArgv...), strings.TrimSpace(cfg.PermissionMode))
+	defer copilotperm.SetGlobalBroker(nil)
 	p := tea.NewProgram(model, tea.WithInput(input), tea.WithOutput(output))
 
 	done := make(chan struct{})
@@ -273,9 +275,10 @@ type agentlineModel struct {
 	currentCancel    context.CancelFunc
 	initialArgv      []string
 	agentOnlyMode    bool
-	permissionBroker *agentacp.PermissionBroker
+	permissionBroker  *agentacp.PermissionBroker
 	copilotPermBroker *copilotperm.Broker
-	questionBroker   *QuestionBroker
+	permissionMode    copilotperm.Mode
+	questionBroker    *QuestionBroker
 	acpEventSeq      int64
 	acpEventEntries  []acpEventEntry
 }
@@ -290,7 +293,7 @@ type acpDemoResultMsg struct {
 	err    error
 }
 
-func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string, history []string, historyFile string, persist bool, initialArgv []string) *agentlineModel {
+func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string, history []string, historyFile string, persist bool, initialArgv []string, cliPermissionMode string) *agentlineModel {
 	ti := textinput.New()
 	ti.Prompt = prompt
 	styles := textinput.DefaultStyles(true)
@@ -312,6 +315,12 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 	hasAgentCommands := hasAnyAgentCommand(root)
 	sessionCWD, sessionGitBranch, sessionGitDirty := detectSessionContext()
 
+	permissionMode := copilotperm.Mode("")
+	if root != nil && root.Use == "copilot" {
+		resolved, _ := copilotperm.ResolveMode(cliPermissionMode, copilotperm.DefaultMode)
+		permissionMode = resolved
+	}
+
 	m := &agentlineModel{
 		ctx:              ctx,
 		root:             root,
@@ -330,7 +339,8 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 		agentOnlyMode:    agentOnlyMode,
 		permissionBroker: agentacp.NewPermissionBroker(),
 		copilotPermBroker: copilotperm.NewBroker(),
-		questionBroker:   NewQuestionBroker(),
+		permissionMode:    permissionMode,
+		questionBroker:    NewQuestionBroker(),
 		blocks: []sessionBlock{{
 			Kind:  blockKindSystem,
 			Title: "system",
@@ -349,6 +359,11 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 		if !hasAgentCommands {
 			m.blocks[0].Lines = append(m.blocks[0].Lines, "当前未检测到任何 agent 命令，请先为目标命令设置 metadata。")
 		}
+	}
+	if permissionMode != "" {
+		m.blocks[0].Lines = append(m.blocks[0].Lines,
+			fmt.Sprintf("permission-mode: %s（/permission-mode 查看或切换）", permissionMode),
+		)
 	}
 	m.recomputeSuggestions()
 	m.initCopilotPermissionBroker()
@@ -737,6 +752,9 @@ func runSlashRunCmd(ctx context.Context, m *agentlineModel, root *redant.Command
 		}
 		if args[0] == root.Name() {
 			args = args[1:]
+		}
+		if m != nil && m.root != nil && m.root.Use == "copilot" {
+			args = copilotperm.InjectPermissionMode(args, m.permissionMode)
 		}
 		if len(args) == 0 {
 			err := errors.New("missing target command after root name")

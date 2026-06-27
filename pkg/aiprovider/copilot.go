@@ -42,7 +42,7 @@ func RunCopilotSession(ctx context.Context, cfg CopilotConfig, prompt string, cb
 	defer func() { _ = client.Stop() }()
 
 	auditor, _ := copilotperm.NewFileAuditor()
-	mode, err := copilotperm.ParseMode(defaultCopilotString(cfg.PermissionMode, string(copilotperm.ModeDeny)))
+	mode, err := copilotperm.ResolveMode(cfg.PermissionMode, copilotperm.ModeDeny)
 	if err != nil {
 		mode = copilotperm.ModeDeny
 	}

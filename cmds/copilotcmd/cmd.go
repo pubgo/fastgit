@@ -16,6 +16,7 @@ import (
 	copilot "github.com/github/copilot-sdk/go"
 	agentlineapp "github.com/pubgo/fastgit/cmds/agentlineapp"
 	agentlinemodule "github.com/pubgo/fastgit/pkg/agentline"
+	"github.com/pubgo/fastgit/pkg/copilotperm"
 	skillsmodule "github.com/pubgo/fastgit/pkg/skills"
 	"github.com/pubgo/redant"
 )
@@ -96,7 +97,7 @@ func New() *redant.Command {
 			{Flag: "enable-demo-echo-tool", Description: "启用内置 demo_echo 工具", Value: redant.BoolOf(&enableDemoEchoTool), Default: "false"},
 			{Flag: "enable-skills-tool", Description: "启用内置 skills_tool function call", Value: redant.BoolOf(&enableSkillsTool), Default: "true"},
 			{Flag: "enable-infinite-sessions", Description: "启用 Infinite Sessions", Value: redant.BoolOf(&enableInfiniteSession), Default: "true"},
-			{Flag: "permission-mode", Description: "Copilot 权限策略 ask|allow|deny", Value: redant.StringOf(&permissionMode), Default: "ask"},
+			{Flag: "permission-mode", Description: "Copilot 权限策略 ask|allow|deny（默认 ask；可被 config/env 覆盖）", Value: redant.StringOf(&permissionMode)},
 		},
 	}
 
@@ -155,7 +156,7 @@ func New() *redant.Command {
 						DisabledSkills:      resolved.Advanced.DisabledSkills,
 						InfiniteSessions:    resolved.Advanced.InfiniteSessions,
 						Streaming:           resolved.Streaming,
-						OnPermissionRequest: buildPermissionHandler(permissionMode),
+						OnPermissionRequest: copilotperm.BuildHandler(permissionMode, copilotperm.DefaultMode, inv.Stdin, inv.Stdout),
 						OnUserInputRequest:  buildUserInputHandler(inv, autoUserAnswer),
 					})
 					if err != nil {
@@ -498,7 +499,16 @@ func New() *redant.Command {
 	rootCmd.Children = []*redant.Command{chatCmd, resumeCmd, sessionsCmd, statusCmd, modelsCmd, doctorCmd, inspectCmd, skillsCmd, interactiveDemoCmd}
 	rootCmd.Handler = func(ctx context.Context, inv *redant.Invocation) error {
 		defer rt.Close(inv.Stderr)
-		return agentlineapp.Run(ctx, rootCmd, &agentlineapp.RuntimeOptions{Prompt: "copilot> ", Stdin: inv.Stdin, Stdout: inv.Stdout})
+		mode, err := copilotperm.ResolveMode(permissionMode, copilotperm.DefaultMode)
+		if err != nil {
+			return err
+		}
+		return agentlineapp.Run(ctx, rootCmd, &agentlineapp.RuntimeOptions{
+			Prompt:         "copilot> ",
+			PermissionMode: string(mode),
+			Stdin:          inv.Stdin,
+			Stdout:         inv.Stdout,
+		})
 	}
 	return rootCmd
 }
@@ -1156,7 +1166,7 @@ func ensureSession(ctx context.Context, client *copilot.Client, sid string, opts
 			opts.AutoUserAnswer,
 		),
 	}
-	resumeCfg.OnPermissionRequest = buildPermissionHandler(opts.PermissionMode)
+	resumeCfg.OnPermissionRequest = copilotperm.BuildHandler(opts.PermissionMode, copilotperm.DefaultMode, os.Stdin, os.Stdout)
 
 	s, err := client.ResumeSession(ctx, strings.TrimSpace(sid), resumeCfg)
 	if err != nil {
@@ -1431,7 +1441,7 @@ func hydrateSession(ctx context.Context, client *copilot.Client, sessionID strin
 	defer cancel()
 
 	session, err := client.ResumeSession(rctx, sessionID, &copilot.ResumeSessionConfig{
-		OnPermissionRequest: buildPermissionHandler(cfg.permissionMode),
+		OnPermissionRequest: copilotperm.BuildHandler(cfg.permissionMode, copilotperm.DefaultMode, os.Stdin, os.Stdout),
 		DisableResume:       true,
 	})
 	if err != nil {

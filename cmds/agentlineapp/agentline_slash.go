@@ -11,6 +11,7 @@ import (
 	acp "github.com/coder/acp-go-sdk"
 
 	agentacp "github.com/pubgo/fastgit/cmds/agentlineapp/acp"
+	"github.com/pubgo/fastgit/pkg/copilotperm"
 	"github.com/pubgo/redant"
 )
 
@@ -203,6 +204,35 @@ var slashBuiltins = []slashBuiltin{
 				return nil
 			}
 			m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permissions", Lines: lines})
+			return nil
+		},
+	},
+	{
+		Name:        "permission-mode",
+		Aliases:     []string{"perm-mode"},
+		Description: "查看或切换 Copilot 权限策略（/permission-mode [ask|allow|deny]）",
+		Handler: func(m *agentlineModel, _, _, argText string) tea.Cmd {
+			if m == nil || m.root == nil || m.root.Use != "copilot" {
+				m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permission-mode", Lines: []string{"当前 runtime 不支持 Copilot 权限策略。"}})
+				return nil
+			}
+			arg := strings.TrimSpace(argText)
+			if arg == "" {
+				m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permission-mode", Lines: []string{
+					fmt.Sprintf("当前: %s", m.permissionMode),
+					"用法: /permission-mode ask|allow|deny",
+				}})
+				return nil
+			}
+			mode, err := copilotperm.ParseMode(arg)
+			if err != nil {
+				m.appendBlock(sessionBlock{Kind: blockKindError, Title: "/permission-mode", Lines: []string{err.Error()}})
+				return nil
+			}
+			m.permissionMode = mode
+			m.appendBlock(sessionBlock{Kind: blockKindSystem, Title: "/permission-mode", Lines: []string{
+				fmt.Sprintf("已切换为 %s（后续命令将自动注入 --permission-mode）", mode),
+			}})
 			return nil
 		},
 	},
@@ -586,6 +616,7 @@ func slashHelpLines(root *redant.Command, agentOnly bool) []string {
 		"  /reply [ask_id] <answer>: 回答问题（省略 ask_id 默认回复最新）",
 		"  /skip [ask_id]: 跳过问题（省略 ask_id 默认跳过最新）",
 		"  /permissions: 查看待处理权限请求",
+		"  /permission-mode [ask|allow|deny]: 查看或切换 Copilot 权限策略",
 		"  /allow [request-id] [option-id|index]: 同意权限请求",
 		"  /deny [request-id] [option-id|index]: 拒绝权限请求",
 		"  /history [N]: 查看最近输入历史（默认 20 条）",

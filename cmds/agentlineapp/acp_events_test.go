@@ -12,7 +12,7 @@ import (
 
 func TestHandleSlashInput_ACPEventsTimeline(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	m.appendACPSessionNotification(acp.SessionNotification{
 		SessionId: "sess_1",
@@ -43,7 +43,7 @@ func TestHandleSlashInput_ACPEventsTimeline(t *testing.T) {
 
 func TestHandleSlashInput_ACPEventsExport(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	m.appendACPSessionNotification(acp.SessionNotification{
 		SessionId: "sess_export",

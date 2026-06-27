@@ -12,7 +12,7 @@ import (
 
 func TestHandleSlashInput_PermissionsList(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan acp.RequestPermissionResponse, 1)
 	go func() {
@@ -54,7 +54,7 @@ func TestHandleSlashInput_PermissionsList(t *testing.T) {
 
 func TestHandleSlashInput_AllowResolvesRequest(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan acp.RequestPermissionResponse, 1)
 	go func() {
@@ -90,7 +90,7 @@ func TestHandleSlashInput_AllowResolvesRequest(t *testing.T) {
 
 func TestHandleSlashInput_DenyResolvesRequest(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	respCh := make(chan acp.RequestPermissionResponse, 1)
 	go func() {
@@ -144,7 +144,7 @@ func TestIsAllowedWhileRunning(t *testing.T) {
 
 func TestEnterWhileRunningBlocksNonPermissionSlash(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	m.running = true
 	m.input.SetValue("/run commit --message hi")
 
@@ -161,7 +161,7 @@ func TestEnterWhileRunningBlocksNonPermissionSlash(t *testing.T) {
 
 func TestHandleSlashInput_ACPDemoStartsRunning(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 
 	handled, cmd := m.handleSlashInput("/acp-demo test prompt")
 	if !handled {

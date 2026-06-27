@@ -172,6 +172,9 @@
 
 - 默认进入 `agentline` 交互模式
 - 会话 runtime 在进程内复用，减少重复初始化开销
+- `--permission-mode=ask|allow|deny`：CLI > `FASTGIT_COPILOT_PERMISSION_MODE` > `config.yaml` > 命令默认（chat 为 ask，changelog draft 为 deny）
+- agentline TUI 内可用 `/permission-mode` 切换，后续子命令自动注入 `--permission-mode`
+- `ask` 模式下权限请求进入 TUI 队列，用 `/permissions`、`/allow`、`/deny` 处理
 
 ---
 
@@ -262,6 +265,7 @@
 - `OPENAI_MODEL`
 - `GITHUB_TOKEN`
 - `FASTGIT_AI_CACHE`：设为 `1` 启用 diff 摘要缓存（`~/.config/fastgit/ai-cache/`）
+- `FASTGIT_COPILOT_PERMISSION_MODE`：Copilot 权限策略 `ask|allow|deny`
 
 ---
 

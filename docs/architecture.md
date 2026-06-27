@@ -99,6 +99,7 @@ flowchart TD
 2. 全局环境模板：`~/.config/fastgit/env.yaml`
 3. 仓库本地覆盖：`<repo>/.git/fastgit.env`
 4. 仓库团队规则：`<repo>/.fastgit/policy.yaml`、`<repo>/.fastgit/commit.yaml`、`<repo>/.fastgit/check.yaml`
+5. Copilot 权限策略：`~/.config/fastgit/config.yaml` 中 `copilot.permission_mode`（`ask|allow|deny`）
 
 合并优先级：CLI flag > 仓库 `.fastgit/` > 本地 env > 全局配置 > 内置默认。
 
@@ -124,6 +125,7 @@ AI 缓存：`~/.config/fastgit/ai-cache/`（设置 `FASTGIT_AI_CACHE=1` 后按 p
 - `OPENAI_MODEL`
 - `GITHUB_TOKEN`（Copilot 相关）
 - `FASTGIT_AI_CACHE`（设为 `1/true/yes` 启用 diff 摘要缓存）
+- `FASTGIT_COPILOT_PERMISSION_MODE`（Copilot 权限策略 `ask|allow|deny`，覆盖 config 默认值）
 
 ---
 

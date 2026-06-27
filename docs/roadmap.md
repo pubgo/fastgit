@@ -228,7 +228,7 @@ PR 正文建议固定小节，便于 review：
 - [x] 三种模式行为可预测且互斥（`pkg/copilotperm`）
 - [x] 默认模式安全（copilot `ask`，changelog draft `deny`）
 - [x] 日志可追溯到 session id + tool name（`~/.config/fastgit/audit.log`）
-- [ ] agentline TUI 与 Copilot chat 共用同一套策略配置
+- [x] agentline TUI 与 Copilot chat 共用同一套策略配置（`ResolveMode` + TUI `/permission-mode` + 自动注入）
 
 #### 当前进度
 

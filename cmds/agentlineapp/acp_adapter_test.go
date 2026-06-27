@@ -37,7 +37,7 @@ func TestSessionBlocksFromACP_AgentAndToolUpdates(t *testing.T) {
 
 func TestAppendACPSessionNotification_AppendsBlocks(t *testing.T) {
 	root := buildTestRoot()
-	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil)
+	m := newAgentlineModel(context.Background(), root, "agent> ", nil, "", false, nil, "")
 	initial := len(m.blocks)
 
 	m.appendACPSessionNotification(acp.SessionNotification{
