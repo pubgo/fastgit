@@ -62,6 +62,7 @@ flowchart LR
 - [x] changelog draft 迁移至 `RunCopilotSession`
 - [x] PR AI 增强（`pr create --ai`）
 - [ ] Stream 接口与 diff 缓存
+- [x] diff 摘要缓存（`FASTGIT_AI_CACHE=1`，`~/.config/fastgit/ai-cache/`）
 
 ---
 
@@ -119,8 +120,8 @@ flowchart LR
 #### 当前进度
 
 - [x] 命令骨架：`check run` / `check config` / `check hook`（MVP，含 dry-run）
-- [ ] 完整 staged-only 分步过滤
-- [ ] 团队级 `.fastgit/check.yaml` 配置
+- [x] 团队级 `.fastgit/check.yaml` 配置
+- [x] staged-only 对 fmt/vet/test 分步过滤
 - [x] secret scan：自动检测 gitleaks / trufflehog（staged 与全量）
 
 ---
@@ -162,7 +163,7 @@ PR 正文建议固定小节，便于 review：
 - [ ] PR 描述至少包含：变更点、风险点、验证建议
 - [ ] 失败时不会误改本地分支状态
 - [ ] 支持 dry-run 输出（便于审阅）
-- [ ] `pr merge` 需用户确认，默认不静默合并
+- [x] `pr merge` 需用户确认（默认交互确认，`--yes` 跳过）
 
 #### 当前进度
 
@@ -188,9 +189,10 @@ PR 正文建议固定小节，便于 review：
 #### 验收标准（DoD）
 
 - [x] `fastgit commit` 默认在提交前运行 `check run --staged-only`（`--skip-check` 可跳过）
-- [ ] 安装后 `git commit` 触发 check，失败时 commit 中止
-- [ ] 卸载后恢复原始钩子行为
-- [ ] 文档说明与 lefthook 等共存方式
+- [x] 安装后 `git commit` 触发 check（pre-commit），失败时 commit 中止
+- [x] pre-push 钩子运行全量 `check run`
+- [x] 卸载后移除 fastgit 管理的 pre-commit / pre-push
+- [x] 文档说明与 lefthook 等共存方式（hook install --force）
 
 > 实现载体：`check hook` 子命令（见 §1），不单独重复实现引擎。
 
@@ -257,7 +259,7 @@ PR 正文建议固定小节，便于 review：
 - [x] 冲突场景下输出结构化摘要（文件、模块、建议）
 - [x] `fastgit conflict list|open|summary`
 - [x] `pull` 冲突时自动输出摘要
-- [ ] AI 生成冲突原因（依赖 AIProvider）
+- [x] AI 生成冲突原因（`conflict summary --ai`，依赖 AIProvider）
 
 #### 当前进度
 
@@ -283,6 +285,7 @@ PR 正文建议固定小节，便于 review：
 - [x] 候选消息具备可区分风格（`--candidates`：SHORT/MEDIUM/CONVENTIONAL）
 - [x] breaking change 启发式提示
 - [ ] 团队模板（scope、前缀、语言）
+- [x] `.fastgit/commit.yaml` 团队 types/locale + `candidates_default`
 
 #### 当前进度
 
@@ -305,9 +308,9 @@ PR 正文建议固定小节，便于 review：
 
 #### 验收标准（DoD）
 
-- [ ] release 输出结构稳定
-- [ ] 关键字段缺失时给出明确阻断原因
-- [ ] 与 `.version/VERSION` 联动一致
+- [x] draft 规则引擎补充影响/验证/回滚（`changelog draft --enrich`）
+- [x] release 前校验 Unreleased 完整性（影响/验证/回滚，`--skip-validate` 逃生）
+- [x] bump 与变更类型一致性校验（`--skip-bump-check` 逃生）
 
 ---
 
@@ -328,7 +331,7 @@ PR 正文建议固定小节，便于 review：
 - [x] `fastgit review staged`：Blockers / Suggestions / Nits / Test plan
 - [x] `--dry-run` 与 AI fallback（规则版）
 - [x] 仅读取 staged diff，不修改代码
-- [ ] 与 `pr create` 可选联动（review 摘要写入 Test plan）
+- [x] 与 `pr create` 可选联动（review 摘要写入 Test plan，`--review`）
 
 ---
 
@@ -353,7 +356,7 @@ PR 正文建议固定小节，便于 review：
 
 - [x] 推荐基于真实使用频率（`workflow.yaml`）+ 默认链
 - [x] commit/pull 完成后输出 `Next:` 提示
-- [ ] 与 `ggc interactive` 深度集成
+- [x] `ggc interactive` TUI 底部展示 workflow 推荐
 - [x] 不发送数据到远端（本地文件）
 
 #### 当前进度
@@ -381,6 +384,7 @@ PR 正文建议固定小节，便于 review：
 - [x] 分支/commit 校验（`fastgit team validate`）
 - [x] `commit` / `check` / `pr create` 读取规则并 warning
 - [x] 保护分支 push 硬阻断（`push` / `commit`，`--override-policy` 逃生）
+- [x] commit/branch 策略 hard enforce（`policy.enforce: true`，`--skip-policy` 逃生）
 - [ ] 违规自动修复建议
 
 - 分支命名规则

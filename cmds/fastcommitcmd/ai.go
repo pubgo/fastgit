@@ -67,6 +67,13 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 			return nil
 		}
 
+		repoRoot := mustRepoRoot()
+		repoCfg, _ := repoconfig.Load(repoRoot)
+		if err := enforceRepoPolicy(repoCfg, currentBranch(), msg, flags.skipPolicy); err != nil {
+			return err
+		}
+		warnRepoPolicy(repoCfg, currentBranch(), msg)
+
 		assert.Must(utils.ShellExec(ctx, "git", "add", "-A"))
 		res := utils.ShellExecOutput(ctx, "git", "status").Unwrap()
 
@@ -135,6 +142,9 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 	}
 
 	repoCfg, _ := repoconfig.Load(repoRoot)
+	if err := repoCfg.CheckBranch(currentBranch(), flags.skipPolicy); err != nil {
+		return err
+	}
 	for _, file := range diffResult.Files {
 		if repoCfg.MatchesSensitivePath(file) {
 			log.Warn().Str("file", file).Msg("sensitive path staged — review carefully")
@@ -158,10 +168,14 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 	if repoCfg.Commit.MaxLength > 0 {
 		maxLength = repoCfg.Commit.MaxLength
 	}
-	generatePrompt := utils.GeneratePrompt(locale, maxLength, utils.ConventionalCommitType)
+	generatePrompt := utils.AppendAllowedTypes(
+		utils.GeneratePrompt(locale, maxLength, utils.ConventionalCommitType),
+		repoCfg.Commit.Types,
+	)
 
+	useCandidates := flags.candidates || repoCfg.Commit.CandidatesDefault
 	var msg string
-	if flags.candidates {
+	if useCandidates {
 		candidates, err := aiprovider.GenerateCommitCandidates(ctx, params.AI, diffResult.Diff)
 		s.Stop()
 		if err != nil {
@@ -218,20 +232,20 @@ func runAICommit(ctx context.Context, flags *flagOptions) error {
 		return nil
 	}
 
-	if err := repoCfg.ValidateCommitMessage(msg); err != nil {
-		log.Warn().Err(err).Msg("commit message policy warning")
-		fmt.Printf("policy warning: %v\n", err)
+	if err := enforceRepoPolicy(repoCfg, currentBranch(), msg, flags.skipPolicy); err != nil {
+		return err
 	}
+	warnRepoPolicy(repoCfg, currentBranch(), msg)
 
 	assert.Must(utils.ShellExec(ctx, "git", "commit", "-m", strconv.Quote(msg)))
 	if err := ensurePushPolicy(repoRoot, utils.GetBranchName(), flags.overridePolicy); err != nil {
 		return err
 	}
 	utils.GitPush(ctx, "--force-with-lease", "origin", utils.GetBranchName())
-	if flags.showPrompt && !flags.candidates {
+	if flags.showPrompt && !useCandidates {
 		fmt.Println("\n" + generatePrompt + "\n")
 	}
-	log.Info().Str("message", msg).Bool("candidates", flags.candidates).Msg("commit message generated")
+	log.Info().Str("message", msg).Bool("candidates", useCandidates).Msg("commit message generated")
 	workflow.PrintRecommendations(os.Stdout, "commit")
 	return nil
 }

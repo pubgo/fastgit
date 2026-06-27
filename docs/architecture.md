@@ -19,6 +19,7 @@
 - Copilot 会话集成（`fastgit copilot *`）
 - PR 闭环（`fastgit pr *`）
 - 质量门禁（`fastgit check *`）
+- 本地代码评审（`fastgit review *`）
 - 冲突助手（`fastgit conflict *`）
 - 团队仓库规则（`.fastgit/` + `fastgit team *`）
 - 常见 Git 工作流封装（`pull/push/tag/worktree/ggc`）
@@ -53,11 +54,11 @@ flowchart TD
 - `bootstrap/`：应用装配层（命令注册、中间件、初始化配置、DI 注入）。
 - `cmds/`：命令实现层，每个子目录对应一个命令域。
 - `utils/`：通用基础能力（git shell、prompt 生成、OpenAI client、github release 等）。
-- `pkg/aiprovider`：OpenAI / Copilot / fallback 统一接口
+- `pkg/aiprovider`：OpenAI / Copilot / fallback 统一接口，含 diff 摘要缓存（`cache.go`）
 - `pkg/copilotperm`：Copilot 权限策略与 agentline broker
-- `pkg/gitconflict`：冲突文件分组与摘要
+- `pkg/gitconflict`：冲突文件分组与摘要，可选 AI 冲突原因（`ai.go`）
 - `pkg/workflow`：命令链记忆与 next-step 推荐
-- `pkg/repoconfig`：`.fastgit` 团队规则加载与校验
+- `pkg/repoconfig`：`.fastgit` 团队规则加载与校验（含策略 enforce）
 - `configs/`：配置模板与配置路径解析。
 
 ---
@@ -74,7 +75,7 @@ flowchart TD
 `bootstrap.Main()` 注册当前主命令：
 
 - `version / init / upgrade / tag / ssh-login / history / ggc`
-- `commit / check / conflict / pr / team / config / docs`
+- `commit / check / review / conflict / pr / team / config / docs`
 - `pull / push / worktree / changelog / copilot`
 
 ### 3.3 全局中间件
@@ -97,9 +98,19 @@ flowchart TD
 1. 全局配置：`~/.config/fastgit/config.yaml`
 2. 全局环境模板：`~/.config/fastgit/env.yaml`
 3. 仓库本地覆盖：`<repo>/.git/fastgit.env`
-4. 仓库团队规则：`<repo>/.fastgit/policy.yaml`、`<repo>/.fastgit/commit.yaml`
+4. 仓库团队规则：`<repo>/.fastgit/policy.yaml`、`<repo>/.fastgit/commit.yaml`、`<repo>/.fastgit/check.yaml`
+
+合并优先级：CLI flag > 仓库 `.fastgit/` > 本地 env > 全局配置 > 内置默认。
+
+`.fastgit/` 三个文件职责：
+
+- `policy.yaml`：分支命名、保护分支、conventional commit、敏感路径；`enforce: true` 时违规阻断。
+- `commit.yaml`：AI commit 的 locale、长度、scope、团队 `types`、`candidates_default`。
+- `check.yaml`：自定义质量门禁 `steps`（不存在时回落内置流水线）。
 
 工作流记忆：`~/.config/fastgit/workflow.yaml`（记录命令转移频率，用于 next-step 推荐）
+
+AI 缓存：`~/.config/fastgit/ai-cache/`（设置 `FASTGIT_AI_CACHE=1` 后按 prompt 哈希缓存补全结果）
 
 初始化触发点：
 
@@ -112,6 +123,7 @@ flowchart TD
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `GITHUB_TOKEN`（Copilot 相关）
+- `FASTGIT_AI_CACHE`（设为 `1/true/yes` 启用 diff 摘要缓存）
 
 ---
 
@@ -140,6 +152,18 @@ sequenceDiagram
 
 - Prompt 模板由 `utils/prompts.go` 生成。
 - 默认采用 conventional commit 格式约束。
+- 提交前默认运行 `check run --staged-only`（`--skip-check` 跳过）。
+- `.fastgit/policy.yaml` `enforce: true` 时，分支/消息违规阻断提交（`--skip-policy` 跳过）。
+- push 前校验保护分支（`--override-policy` 跳过）。
+
+### 5.x AIProvider 解析链路
+
+所有 AI 命令统一经 `pkg/aiprovider`：
+
+- `Default(client)`：`OpenAI → RuleFallback`，DI 注入给 `commit`。
+- `ResolveProvider(name, dir)`：`auto|openai|copilot`，命令级选择（`pr/review/conflict` 用）。
+- `auto` 链：`OpenAI → Copilot → RuleFallback`，逐级降级，保证 AI 不可用时仍可出规则结果。
+- `WithCache` 包装：启用缓存后命中即返回，避免重复 token 消耗。
 
 ### 5.2 Changelog 工作流（`changelog`）
 
@@ -191,5 +215,6 @@ sequenceDiagram
 3. `configs/config.go`
 4. `cmds/fastcommitcmd`、`cmds/chglogcmd`、`cmds/copilotcmd`
 5. `utils/git.go`、`utils/openai.go`、`utils/prompts.go`
+6. `pkg/aiprovider`（统一 AI 接口与降级链）、`pkg/repoconfig`（团队规则与 enforce）
 
 这样能最快建立“入口—装配—能力—业务链路”的全局心智模型。

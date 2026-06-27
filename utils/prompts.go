@@ -62,3 +62,11 @@ func GeneratePrompt(locale string, maxLength int, commitType CommitType) string 
 
 	return strings.Join(filteredParts, "\n")
 }
+
+// AppendAllowedTypes adds team commit type constraints to a prompt.
+func AppendAllowedTypes(prompt string, allowedTypes []string) string {
+	if len(allowedTypes) == 0 {
+		return prompt
+	}
+	return prompt + "\nPrefer commit types from this team list: " + strings.Join(allowedTypes, ", ")
+}

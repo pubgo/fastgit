@@ -57,6 +57,18 @@ func TestReleaseChangelogCreatesVersionFileAndResetsTemplate(t *testing.T) {
 ## 文档
 
 - 补充使用说明
+
+## 影响范围
+
+- CLI changelog 流程
+
+## 验证建议
+
+- 运行 fastgit check run
+
+## 回滚建议
+
+- revert 相关 commit
 `
 	if err := os.WriteFile(paths.UnreleasedFile, []byte(unreleased), 0o644); err != nil {
 		t.Fatalf("write unreleased: %v", err)

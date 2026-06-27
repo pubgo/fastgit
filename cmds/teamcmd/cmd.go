@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pubgo/fastgit/cmds/checkcmd"
 	"github.com/pubgo/fastgit/pkg/repoconfig"
 	"github.com/pubgo/fastgit/utils"
 	"github.com/pubgo/redant"
@@ -48,6 +49,11 @@ func newInitCommand() *redant.Command {
 			}
 			for _, path := range created {
 				_, _ = fmt.Fprintf(inv.Stdout, "created: %s\n", path)
+			}
+			if checkPath, err := checkcmd.InitConfigTemplate(repoRoot); err != nil {
+				return err
+			} else if checkPath != "" {
+				_, _ = fmt.Fprintf(inv.Stdout, "created: %s\n", checkPath)
 			}
 			return nil
 		},

@@ -17,6 +17,7 @@ const draftPromptTemplate = `你是当前仓库的 Changelog 维护助手。
 5. 只允许修改 .version/changelog/Unreleased.md。
 6. 若分类下暂无内容，写“暂无”。
 7. 不要改动 README、VERSION 或任何历史版本文件。
+8. 维护「影响范围 / 验证建议 / 回滚建议」三个小节；若 Copilot 无法判断，保留规则版占位并标注需人工补充。
 
 归类规则：
 - feat / 新增能力 -> 新增

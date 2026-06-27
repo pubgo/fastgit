@@ -19,12 +19,13 @@ import (
 )
 
 type flagOptions struct {
-	showPrompt      bool
-	fastCommit      bool
-	amend           bool
-	candidates      bool
-	skipCheck       bool
-	overridePolicy  bool
+	showPrompt     bool
+	fastCommit     bool
+	amend          bool
+	candidates     bool
+	skipCheck      bool
+	skipPolicy     bool
+	overridePolicy bool
 }
 
 type Config struct {
@@ -71,6 +72,11 @@ func New() *redant.Command {
 						Flag:        "skip-check",
 						Description: "Skip pre-commit quality check (fastgit check run --staged-only).",
 						Value:       redant.BoolOf(&flags.skipCheck),
+					},
+					{
+						Flag:        "skip-policy",
+						Description: "Bypass .fastgit/policy.yaml hard enforcement.",
+						Value:       redant.BoolOf(&flags.skipPolicy),
 					},
 					{
 						Flag:        "override-policy",
@@ -125,6 +131,11 @@ func New() *redant.Command {
 				Flag:        "skip-check",
 				Description: "Skip pre-commit quality check (fastgit check run --staged-only).",
 				Value:       redant.BoolOf(&flags.skipCheck),
+			},
+			{
+				Flag:        "skip-policy",
+				Description: "Bypass .fastgit/policy.yaml hard enforcement.",
+				Value:       redant.BoolOf(&flags.skipPolicy),
 			},
 			{
 				Flag:        "override-policy",

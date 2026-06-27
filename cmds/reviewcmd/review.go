@@ -8,7 +8,7 @@ import (
 	"github.com/pubgo/fastgit/pkg/aiprovider"
 )
 
-const reviewSystemPrompt = `You are a code reviewer. Review the staged git diff.
+const reviewSystemPrompt = `You are a code reviewer. Review the git diff.
 
 Output markdown with exactly these sections (use "-" bullets):
 ## Blockers
@@ -25,14 +25,14 @@ Concrete verification steps for this change.
 
 Be concise. Do not invent changes not present in the diff.`
 
-// ReviewStaged runs AI review on a staged diff.
-func ReviewStaged(ctx context.Context, provider aiprovider.Provider, diff string, dryRun bool) (string, error) {
+// ReviewDiff runs AI review on a unified diff string.
+func ReviewDiff(ctx context.Context, provider aiprovider.Provider, diff string, dryRun bool) (string, error) {
 	diff = strings.TrimSpace(diff)
 	if diff == "" {
-		return "", fmt.Errorf("no staged diff to review")
+		return "", fmt.Errorf("no diff to review")
 	}
 	if dryRun {
-		return fmt.Sprintf("[dry-run] would review staged diff (%d bytes)", len(diff)), nil
+		return fmt.Sprintf("[dry-run] would review diff (%d bytes)", len(diff)), nil
 	}
 	if provider == nil || !provider.Available() {
 		return ruleBasedReview(diff), nil
@@ -50,6 +50,11 @@ func ReviewStaged(ctx context.Context, provider aiprovider.Provider, diff string
 		return ruleBasedReview(diff), fmt.Errorf("empty review response")
 	}
 	return text, nil
+}
+
+// ReviewStaged runs AI review on a staged diff.
+func ReviewStaged(ctx context.Context, provider aiprovider.Provider, diff string, dryRun bool) (string, error) {
+	return ReviewDiff(ctx, provider, diff, dryRun)
 }
 
 func ruleBasedReview(diff string) string {

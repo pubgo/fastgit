@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/pubgo/redant"
 )
@@ -97,7 +94,7 @@ func newConfigCommand() *redant.Command {
 				}
 			}
 			_, _ = fmt.Fprintf(inv.Stdout, "repo: %s\n", repoRoot)
-			_, _ = fmt.Fprintln(inv.Stdout, "config file: .fastgit/check.yaml (schema pending)")
+			_, _ = fmt.Fprintln(inv.Stdout, "config file: .fastgit/check.yaml")
 			return nil
 		},
 	}
@@ -114,21 +111,22 @@ func newHookCommand() *redant.Command {
 	hook.Children = []*redant.Command{
 		{
 			Use:   "install",
-			Short: "安装 pre-commit 钩子（调用 fastgit check run --staged-only）",
+			Short: "安装 pre-commit 与 pre-push 钩子",
+			Long:  "pre-commit 运行 `fastgit check run --staged-only`；pre-push 运行 `fastgit check run`。与 lefthook 等工具共存时，请勿覆盖非 fastgit 管理的钩子。",
 			Options: redant.OptionSet{
 				{Flag: "force", Description: "覆盖已有非 fastgit 钩子", Value: redant.BoolOf(&force)},
 			},
 			Handler: func(ctx context.Context, inv *redant.Invocation) error {
 				_ = ctx
-				return installHook(inv, force)
+				return installHooks(inv, force)
 			},
 		},
 		{
 			Use:   "uninstall",
-			Short: "移除 fastgit 管理的 pre-commit 钩子",
+			Short: "移除 fastgit 管理的 pre-commit / pre-push 钩子",
 			Handler: func(ctx context.Context, inv *redant.Invocation) error {
 				_ = ctx
-				return uninstallHook(inv)
+				return uninstallHooks(inv)
 			},
 		},
 	}
@@ -150,80 +148,4 @@ func printResults(inv *redant.Invocation, results []StepResult, dryRun bool) {
 	} else {
 		_, _ = fmt.Fprintln(inv.Stdout, "check passed")
 	}
-}
-
-func installHook(inv *redant.Invocation, force bool) error {
-	gitDir, err := resolveGitDir()
-	if err != nil {
-		return fmt.Errorf("not a git repository: %w", err)
-	}
-
-	hookPath := fmt.Sprintf("%s/hooks/pre-commit", gitDir)
-	if data, err := os.ReadFile(hookPath); err == nil {
-		content := string(data)
-		if strings.Contains(content, hookMarker) {
-			_, _ = fmt.Fprintf(inv.Stdout, "pre-commit hook already installed: %s\n", hookPath)
-			return nil
-		}
-		if !force {
-			return fmt.Errorf("pre-commit hook exists and is not fastgit-managed; use --force to overwrite")
-		}
-	}
-
-	script := fmt.Sprintf(`#!/bin/sh
-%s
-exec fastgit check run --staged-only
-`, hookMarker)
-
-	if err := os.WriteFile(hookPath, []byte(script), 0o755); err != nil {
-		return fmt.Errorf("write pre-commit hook: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(inv.Stdout, "installed pre-commit hook: %s\n", hookPath)
-	return nil
-}
-
-func uninstallHook(inv *redant.Invocation) error {
-	gitDir, err := resolveGitDir()
-	if err != nil {
-		return fmt.Errorf("not a git repository: %w", err)
-	}
-
-	hookPath := fmt.Sprintf("%s/hooks/pre-commit", gitDir)
-	data, err := os.ReadFile(hookPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			_, _ = fmt.Fprintln(inv.Stdout, "no pre-commit hook to remove")
-			return nil
-		}
-		return err
-	}
-
-	if !strings.Contains(string(data), hookMarker) {
-		return fmt.Errorf("pre-commit hook is not fastgit-managed; refusing to remove")
-	}
-
-	if err := os.Remove(hookPath); err != nil {
-		return fmt.Errorf("remove pre-commit hook: %w", err)
-	}
-
-	_, _ = fmt.Fprintf(inv.Stdout, "removed pre-commit hook: %s\n", hookPath)
-	return nil
-}
-
-func resolveGitDir() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--git-dir")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	dir := strings.TrimSpace(string(out))
-	if !filepath.IsAbs(dir) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return "", err
-		}
-		dir = filepath.Join(cwd, dir)
-	}
-	return dir, nil
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pubgo/fastgit/pkg/aiprovider"
 	"github.com/pubgo/fastgit/pkg/repoconfig"
 	"github.com/pubgo/redant"
 )
@@ -35,6 +34,7 @@ func newCreateCommand() *redant.Command {
 		baseRef    string
 		repo       string
 		useAI      bool
+		useReview  bool
 		aiProvider string
 	)
 
@@ -46,6 +46,7 @@ func newCreateCommand() *redant.Command {
 			{Flag: "base", Description: "目标 base 分支（默认自动探测）", Value: redant.StringOf(&baseRef)},
 			{Flag: "repo", Description: "仓库目录（默认当前目录）", Value: redant.StringOf(&repo)},
 			{Flag: "ai", Description: "使用 AI 润色 PR 标题与正文（失败时保留规则版）", Value: redant.BoolOf(&useAI)},
+			{Flag: "review", Description: "将本地 code review 摘要写入 Test plan", Value: redant.BoolOf(&useReview)},
 			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
@@ -75,16 +76,24 @@ func newCreateCommand() *redant.Command {
 				return err
 			}
 
-			if useAI {
-				provider := aiprovider.ResolveProvider(aiProvider, repoRoot)
-				enhanced, ok, aiErr := EnhanceDraft(ctx, provider, draft)
-				if aiErr != nil {
-					_, _ = fmt.Fprintf(inv.Stdout, "ai enhance skipped: %v\n", aiErr)
-				} else if ok {
-					draft = enhanced
-					_, _ = fmt.Fprintln(inv.Stdout, "ai: enhanced PR title and body")
+			if useReview || useAI {
+				enhanced, enhanceErr := enhanceDraft(ctx, draft, rc, draftEnhanceOptions{
+					useAI:      useAI,
+					useReview:  useReview,
+					aiProvider: aiProvider,
+					repoRoot:   repoRoot,
+					dryRun:     dryRun,
+				})
+				if enhanceErr != nil {
+					_, _ = fmt.Fprintf(inv.Stdout, "draft enhance warning: %v\n", enhanceErr)
 				} else {
-					_, _ = fmt.Fprintln(inv.Stdout, "ai: no provider available, using rule-based draft")
+					draft = enhanced
+					if useReview {
+						_, _ = fmt.Fprintln(inv.Stdout, "review: merged local review into Test plan")
+					}
+					if useAI {
+						_, _ = fmt.Fprintln(inv.Stdout, "ai: enhanced PR title and body")
+					}
 				}
 			}
 
@@ -157,12 +166,13 @@ func newStatusCommand() *redant.Command {
 
 func newSyncCommand() *redant.Command {
 	var (
-		dryRun       bool
-		repo         string
-		baseRef      string
-		updateBody   bool
-		useAI        bool
-		aiProvider   string
+		dryRun     bool
+		repo       string
+		baseRef    string
+		updateBody bool
+		useAI      bool
+		useReview  bool
+		aiProvider string
 	)
 
 	return &redant.Command{
@@ -174,6 +184,7 @@ func newSyncCommand() *redant.Command {
 			{Flag: "base", Description: "rebase 目标（默认自动探测）", Value: redant.StringOf(&baseRef)},
 			{Flag: "update-body", Description: "sync 后根据最新 diff 更新 PR 标题与正文", Value: redant.BoolOf(&updateBody)},
 			{Flag: "ai", Description: "更新 PR 正文时使用 AI 润色", Value: redant.BoolOf(&useAI)},
+			{Flag: "review", Description: "更新 PR 时将本地 review 摘要写入 Test plan", Value: redant.BoolOf(&useReview)},
 			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
@@ -203,10 +214,17 @@ func newSyncCommand() *redant.Command {
 					if err != nil {
 						return err
 					}
-					if useAI {
-						provider := aiprovider.ResolveProvider(aiProvider, repoRoot)
-						enhanced, ok, aiErr := EnhanceDraft(ctx, provider, draft)
-						if aiErr == nil && ok {
+					if useReview || useAI {
+						enhanced, enhanceErr := enhanceDraft(ctx, draft, rc, draftEnhanceOptions{
+							useAI:      useAI,
+							useReview:  useReview,
+							aiProvider: aiProvider,
+							repoRoot:   repoRoot,
+							dryRun:     true,
+						})
+						if enhanceErr != nil {
+							_, _ = fmt.Fprintf(inv.Stdout, "draft enhance warning: %v\n", enhanceErr)
+						} else {
 							draft = enhanced
 						}
 					}
@@ -231,12 +249,17 @@ func newSyncCommand() *redant.Command {
 			if err != nil {
 				return err
 			}
-			if useAI {
-				provider := aiprovider.ResolveProvider(aiProvider, repoRoot)
-				enhanced, ok, aiErr := EnhanceDraft(ctx, provider, draft)
-				if aiErr != nil {
-					_, _ = fmt.Fprintf(inv.Stdout, "ai enhance skipped: %v\n", aiErr)
-				} else if ok {
+			if useReview || useAI {
+				enhanced, enhanceErr := enhanceDraft(ctx, draft, rc, draftEnhanceOptions{
+					useAI:      useAI,
+					useReview:  useReview,
+					aiProvider: aiProvider,
+					repoRoot:   repoRoot,
+					dryRun:     false,
+				})
+				if enhanceErr != nil {
+					_, _ = fmt.Fprintf(inv.Stdout, "draft enhance warning: %v\n", enhanceErr)
+				} else {
 					draft = enhanced
 				}
 			}
@@ -252,6 +275,7 @@ func newSyncCommand() *redant.Command {
 func newMergeCommand() *redant.Command {
 	var (
 		dryRun bool
+		yes    bool
 		repo   string
 		method string
 	)
@@ -261,6 +285,7 @@ func newMergeCommand() *redant.Command {
 		Short: "合并当前分支 PR",
 		Options: redant.OptionSet{
 			{Flag: "dry-run", Description: "只输出将执行的 merge 命令", Value: redant.BoolOf(&dryRun)},
+			{Flag: "yes", Description: "跳过合并确认", Value: redant.BoolOf(&yes)},
 			{Flag: "repo", Description: "仓库目录（默认当前目录）", Value: redant.StringOf(&repo)},
 			{Flag: "method", Description: "合并方式 squash|merge|rebase", Value: redant.StringOf(&method), Default: "squash"},
 		},
@@ -284,6 +309,11 @@ func newMergeCommand() *redant.Command {
 			gh := NewGhClient(repoRoot)
 			if err := gh.EnsureAvailable(ctx); err != nil {
 				return err
+			}
+			if !yes {
+				if err := confirmMerge(ctx, gh, method); err != nil {
+					return err
+				}
 			}
 			out, err := gh.MergePR(ctx, method, false)
 			if err != nil {

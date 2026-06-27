@@ -45,10 +45,12 @@ type scaffoldResult struct {
 }
 
 type releaseOptions struct {
-	Version     string
-	NextVersion string
-	Bump        string
-	DryRun      bool
+	Version       string
+	NextVersion   string
+	Bump          string
+	DryRun        bool
+	SkipValidate  bool
+	SkipBumpCheck bool
 }
 
 type releaseResult struct {
@@ -235,13 +237,22 @@ func releaseChangelog(repoRoot string, opts releaseOptions) (releaseResult, erro
 	}
 
 	sections := parseStandardSections(string(unreleasedContent))
-	if !hasMeaningfulEntries(sections) {
+	if !opts.SkipValidate {
+		if err := ValidateReleaseReadiness(string(unreleasedContent)); err != nil {
+			return releaseResult{}, err
+		}
+	} else if !hasMeaningfulEntries(sections) {
 		return releaseResult{}, errors.New("unreleased.md 中没有可发布的变更条目")
 	}
 	releaseContent := renderReleaseContent(currentVersion, time.Now(), sections)
 	nextVersion, err := resolveNextVersion(currentVersion, strings.TrimSpace(opts.NextVersion), strings.TrimSpace(opts.Bump))
 	if err != nil {
 		return releaseResult{}, err
+	}
+	if !opts.SkipBumpCheck {
+		if err := ValidateBumpConsistency(sections, strings.TrimSpace(opts.Bump)); err != nil {
+			return releaseResult{}, err
+		}
 	}
 
 	created := []string{targetFile}
@@ -279,33 +290,18 @@ func releaseChangelog(repoRoot string, opts releaseOptions) (releaseResult, erro
 }
 
 func renderUnreleasedTemplate() string {
-	return strings.TrimSpace(`
-# [Unreleased]
-
-> 推荐维护方式：`+"`fastgit changelog draft|release`"+`
-
-## 新增
-
-暂无
-
-## 修复
-
-暂无
-
-## 变更
-
-暂无
-
-## 文档
-
-暂无
-`) + "\n"
+	sections := make(map[string]string)
+	for _, title := range append(standardSections, metaSections...) {
+		sections[title] = "暂无"
+	}
+	return renderUnreleasedWithMeta(sections)
 }
 
 func renderReleaseContent(version string, now time.Time, sections map[string]string) string {
 	var buf bytes.Buffer
 	_, _ = fmt.Fprintf(&buf, "# [%s] - %s\n\n", version, now.Format("2006-01-02"))
-	for _, title := range standardSections {
+	allTitles := append(append([]string{}, standardSections...), metaSections...)
+	for _, title := range allTitles {
 		body := normalizeSectionBody(sections[title])
 		_, _ = fmt.Fprintf(&buf, "## %s\n\n", title)
 		buf.WriteString(body)
@@ -315,42 +311,7 @@ func renderReleaseContent(version string, now time.Time, sections map[string]str
 }
 
 func parseStandardSections(content string) map[string]string {
-	sections := make(map[string]string, len(standardSections))
-	for _, title := range standardSections {
-		sections[title] = "暂无"
-	}
-
-	current := ""
-	var buf bytes.Buffer
-	flush := func() {
-		if current == "" {
-			buf.Reset()
-			return
-		}
-		sections[current] = normalizeSectionBody(buf.String())
-		buf.Reset()
-	}
-
-	for _, rawLine := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(rawLine)
-		if strings.HasPrefix(line, "## ") {
-			flush()
-			title := strings.TrimSpace(strings.TrimPrefix(line, "## "))
-			if containsString(standardSections, title) {
-				current = title
-			} else {
-				current = ""
-			}
-			continue
-		}
-		if current == "" {
-			continue
-		}
-		buf.WriteString(rawLine)
-		buf.WriteString("\n")
-	}
-	flush()
-	return sections
+	return parseAllSections(content)
 }
 
 func normalizeSectionBody(body string) string {

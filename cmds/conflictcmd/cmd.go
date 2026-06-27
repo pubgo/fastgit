@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/pubgo/fastgit/pkg/aiprovider"
 	"github.com/pubgo/fastgit/pkg/gitconflict"
 	"github.com/pubgo/redant"
 )
@@ -30,21 +31,33 @@ func New() *redant.Command {
 }
 
 func newSummaryCommand() *redant.Command {
-	var repo string
+	var (
+		repo       string
+		useAI      bool
+		aiProvider string
+	)
 	return &redant.Command{
 		Use:   "summary",
 		Short: "输出冲突文件分组与处理建议（默认）",
 		Options: redant.OptionSet{
 			{Flag: "repo", Description: "仓库目录（默认当前目录）", Value: redant.StringOf(&repo)},
+			{Flag: "ai", Description: "使用 AI 分析冲突原因（失败时保留启发式建议）", Value: redant.BoolOf(&useAI)},
+			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveRepoRoot(repo)
 			if err != nil {
 				return err
 			}
-			snap, err := gitconflict.BuildSnapshot(ctx, repoRoot)
+			provider := aiprovider.ResolveProvider(aiProvider, repoRoot)
+			snap, err := gitconflict.BuildSnapshotWithAI(ctx, repoRoot, provider, useAI)
 			if err != nil {
 				return err
+			}
+			if useAI && provider != nil && provider.Available() {
+				_, _ = fmt.Fprintln(inv.Stdout, "ai: enhanced conflict reasons")
+			} else if useAI {
+				_, _ = fmt.Fprintln(inv.Stdout, "ai: unavailable, using heuristic reasons")
 			}
 			_, _ = fmt.Fprintln(inv.Stdout, snap.Summary)
 			if len(snap.Files) > 0 {

@@ -76,6 +76,7 @@ func newDraftCommand() *redant.Command {
 		repoPath        string
 		baseRef         string
 		printPrompt     bool
+		enrich          bool
 		cliPath         string
 		logLevel        string
 		githubToken     string
@@ -94,6 +95,7 @@ func newDraftCommand() *redant.Command {
 			{Flag: "repo", Description: "目标仓库目录（默认当前目录）", Value: redant.StringOf(&repoPath)},
 			{Flag: "base", Description: "diff 基线（默认自动探测）", Value: redant.StringOf(&baseRef)},
 			{Flag: "print-prompt", Description: "只打印最终 prompt，不调用 Copilot", Value: redant.BoolOf(&printPrompt), Default: "false"},
+			{Flag: "enrich", Description: "用规则引擎预填 影响范围/验证建议/回滚建议", Value: redant.BoolOf(&enrich), Default: "false"},
 			{Flag: "copilot-cli-path", Description: "Copilot CLI 可执行路径（可选）", Value: redant.StringOf(&cliPath)},
 			{Flag: "copilot-log-level", Description: "Copilot CLI 日志级别", Value: redant.StringOf(&logLevel), Default: "error"},
 			{Flag: "copilot-token", Description: "GitHub Token（可选）", Value: redant.StringOf(&githubToken), Envs: []string{"GITHUB_TOKEN"}},
@@ -127,6 +129,24 @@ func newDraftCommand() *redant.Command {
 			}
 			_, _ = fmt.Fprintf(inv.Stdout, "repo: %s\nbase: %s\n", repoRoot, detectedBase)
 
+			if enrich {
+				diffNames, err := gitOutput(ctx, repoRoot, "diff", detectedBase, "--name-only")
+				if err != nil {
+					return err
+				}
+				paths := buildPaths(repoRoot)
+				meta := DeriveReleaseMeta(diffNames)
+				changed, err := ApplyReleaseMetaToUnreleased(paths.UnreleasedFile, meta)
+				if err != nil {
+					return err
+				}
+				if changed {
+					_, _ = fmt.Fprintln(inv.Stdout, "enrich: updated Unreleased.md meta sections")
+				} else {
+					_, _ = fmt.Fprintln(inv.Stdout, "enrich: meta sections already filled")
+				}
+			}
+
 			if printPrompt {
 				_, _ = fmt.Fprintln(inv.Stdout, prompt)
 				return nil
@@ -154,7 +174,9 @@ func newReleaseCommand() *redant.Command {
 		version     string
 		nextVersion string
 		bump        string
-		dryRun      bool
+		dryRun        bool
+		skipValidate  bool
+		skipBumpCheck bool
 	)
 
 	return &redant.Command{
@@ -166,6 +188,8 @@ func newReleaseCommand() *redant.Command {
 			{Flag: "next-version", Description: "发布后写回 .version/VERSION 的下一个版本号", Value: redant.StringOf(&nextVersion)},
 			{Flag: "bump", Description: "自动计算下一个版本号（patch|minor|major）", Value: redant.StringOf(&bump)},
 			{Flag: "dry-run", Description: "仅预览将要改动的文件，不写入磁盘", Value: redant.BoolOf(&dryRun), Default: "false"},
+			{Flag: "skip-validate", Description: "跳过 Unreleased 完整性校验（影响/验证/回滚）", Value: redant.BoolOf(&skipValidate), Default: "false"},
+			{Flag: "skip-bump-check", Description: "跳过 bump 与变更类型一致性校验", Value: redant.BoolOf(&skipBumpCheck), Default: "false"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			_ = ctx
@@ -175,10 +199,12 @@ func newReleaseCommand() *redant.Command {
 			}
 
 			result, err := releaseChangelog(repoRoot, releaseOptions{
-				Version:     strings.TrimSpace(version),
-				NextVersion: strings.TrimSpace(nextVersion),
-				Bump:        strings.TrimSpace(bump),
-				DryRun:      dryRun,
+				Version:       strings.TrimSpace(version),
+				NextVersion:   strings.TrimSpace(nextVersion),
+				Bump:          strings.TrimSpace(bump),
+				DryRun:        dryRun,
+				SkipValidate:  skipValidate,
+				SkipBumpCheck: skipBumpCheck,
 			})
 			if err != nil {
 				return err

@@ -14,7 +14,8 @@ const repoConfigDir = ".fastgit"
 
 // Policy defines team governance rules for a repository.
 type Policy struct {
-	Branch struct {
+	Enforce           bool `yaml:"enforce"`
+	Branch            struct {
 		Pattern string `yaml:"pattern"`
 	} `yaml:"branch"`
 	ProtectedBranches []string `yaml:"protected_branches"`
@@ -26,10 +27,11 @@ type Policy struct {
 
 // CommitSettings defines AI commit generation preferences.
 type CommitSettings struct {
-	Locale       string   `yaml:"locale"`
-	MaxLength    int      `yaml:"max_length"`
-	RequireScope bool     `yaml:"require_scope"`
-	Types        []string `yaml:"types"`
+	Locale            string   `yaml:"locale"`
+	MaxLength         int      `yaml:"max_length"`
+	RequireScope      bool     `yaml:"require_scope"`
+	CandidatesDefault bool     `yaml:"candidates_default"`
+	Types             []string `yaml:"types"`
 }
 
 // Bundle contains repository-local fastgit settings.
@@ -150,6 +152,32 @@ func (b Bundle) MatchesSensitivePath(path string) bool {
 	return false
 }
 
+// CheckBranch returns a blocking error when enforce is on and the branch violates policy.
+func (b Bundle) CheckBranch(branch string, skipPolicy bool) error {
+	err := b.ValidateBranch(branch)
+	if err == nil || skipPolicy || !b.Policy.Enforce {
+		return nil
+	}
+	return fmt.Errorf("branch blocked by .fastgit/policy.yaml: %w (use --skip-policy to bypass)", err)
+}
+
+// CheckCommitMessage returns a blocking error when enforce is on and the message violates policy.
+func (b Bundle) CheckCommitMessage(message string, skipPolicy bool) error {
+	err := b.ValidateCommitMessage(message)
+	if err == nil || skipPolicy || !b.Policy.Enforce {
+		return nil
+	}
+	return fmt.Errorf("commit message blocked by .fastgit/policy.yaml: %w (use --skip-policy to bypass)", err)
+}
+
+// WarnCommitMessage returns validation issues when enforce is off.
+func (b Bundle) WarnCommitMessage(message string) error {
+	if b.Policy.Enforce {
+		return nil
+	}
+	return b.ValidateCommitMessage(message)
+}
+
 // ValidatePush blocks direct pushes to protected branches unless override is set.
 func (b Bundle) ValidatePush(branch string, override bool) error {
 	if override {
@@ -200,7 +228,9 @@ func readYAML(path string, target any) error {
 	return yaml.Unmarshal(data, target)
 }
 
-const defaultPolicyYAML = `branch:
+const defaultPolicyYAML = `enforce: true
+
+branch:
   pattern: "^(feature|fix|chore|docs)/[a-z0-9._/-]+$"
 
 protected_branches:
@@ -220,6 +250,7 @@ sensitive_paths:
 const defaultCommitYAML = `locale: en
 max_length: 72
 require_scope: false
+candidates_default: false
 types:
   - feat
   - fix

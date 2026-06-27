@@ -51,8 +51,10 @@
 
 - 提示词由 `utils.GeneratePrompt()` 统一生成
 - 默认限制提交信息风格与长度
-- 支持 `--amend`、`--fast`、`--candidates`、`--skip-check`、`--override-policy`
+- 支持 `--amend`、`--fast`、`--candidates`、`--skip-check`、`--skip-policy`、`--override-policy`
+- `.fastgit/commit.yaml` 可设 `candidates_default: true` 默认三选一
 - 提交前默认运行 `check run --staged-only`（可用 `--skip-check` 跳过）
+- `.fastgit/policy.yaml` 中 `enforce: true` 时，分支名/commit message 违规将阻断提交
 - 读取 `.fastgit/commit.yaml`（locale、max_length、require_scope）
 - push 前校验 `.fastgit/policy.yaml` 保护分支
 - 完成后推荐下一步（如 `push` → `pr create`）
@@ -68,7 +70,9 @@
 - `run --staged-only`：仅检查 staged 文件（fmt 限定到 staged `.go`）
 - `run --fix`：对可修复项先修复（如 `gofmt -w`）
 - `config`：展示当前门禁步骤
-- `hook install|uninstall`：安装/卸载 pre-commit 钩子
+- `hook install|uninstall`：安装/卸载 pre-commit（staged check）与 pre-push（全量 check）
+- 配置：`.fastgit/check.yaml` 自定义 steps；`team init` 会生成模板
+- 非 fastgit 管理的已有钩子需 `--force` 覆盖；与 lefthook 等请只保留一套 pre-commit
 
 适用场景：
 
@@ -85,11 +89,13 @@
 - `create --dry-run`：只预览，不调用 `gh`
 - `create --ai`：用 AI 润色标题与正文（失败时保留规则版）
 - `create --ai-provider=auto|openai|copilot`：选择 AI 提供方
+- `create --review`：将 `base..HEAD` 本地 review 摘要写入 Test plan
 - `status`：查看当前分支 PR 状态（需 `gh`）
 - `sync`：rebase 到 base 并 `push --force-with-lease`
 - `sync --update-body`：sync 后重新生成并更新 PR 正文
 - `sync --update-body --ai`：更新时用 AI 润色
-- `merge`：合并 PR（默认 squash）
+- `sync --update-body --review`：更新时合并本地 review 到 Test plan
+- `merge`：合并 PR（默认 squash，交互确认，`--yes` 跳过）
 
 依赖：`gh` CLI 已安装并登录；分支需有 upstream。
 
@@ -100,6 +106,7 @@
 子命令：
 
 - `summary`（默认）：按模块分组输出冲突文件与处理建议
+- `summary --ai`：AI 分析冲突原因（失败时保留启发式建议）
 - `list`：列出冲突文件
 - `open`：在 `$EDITOR` 中打开全部冲突文件
 
@@ -137,8 +144,11 @@
 子命令：
 
 - `init`：初始化 `.version/changelog` 及仓库级模板
-- `draft`：基于改动生成草稿，更新 `Unreleased.md`
-- `release`：将 Unreleased 落版为版本文件并重建模板
+- `draft`：Copilot 更新 Unreleased.md
+- `draft --enrich`：规则引擎预填「影响范围 / 验证建议 / 回滚建议」
+- `release`：落版并重建 Unreleased 模板
+- `release --skip-validate`：跳过 meta 小节完整性校验
+- `release --skip-bump-check`：跳过 bump 与变更类型一致性校验
 
 适用场景：
 
@@ -170,7 +180,7 @@
 `ggc` 提供统一命令入口与交互检索：
 
 - `ggc list`：查看命令面
-- `ggc interactive`：fuzzy 选择 + workflow
+- `ggc interactive`：fuzzy 选择 + workflow，底部展示 `Next:` 推荐链
 - `ggc path`：查看状态文件位置
 
 可将多步 Git 操作沉淀成 workflow/alias，适合高频重复动作。
@@ -216,6 +226,22 @@
 3. `fastgit worktree list` 检查状态
 4. 完成后 `fastgit worktree remove 123`
 
+### 场景 D：本地改动到 PR 闭环
+
+1. `fastgit team init`（首次，下发 `.fastgit/` 规则）
+2. `fastgit check run --staged-only`（提交前自检）
+3. `fastgit review staged`（可选，AI 自检）
+4. `fastgit commit`（默认跑 check + 策略校验）
+5. `fastgit pr create --review`（review 摘要写入 Test plan）
+6. `fastgit pr merge`（交互确认后合并）
+
+### 场景 E：质量门禁常驻
+
+1. `fastgit check hook install`（安装 pre-commit + pre-push）
+2. 日常 `git commit` 自动触发 staged check
+3. `git push` 自动触发全量 check
+4. 与 lefthook/husky 共存时，避免重复 pre-commit；非 fastgit 钩子用 `--force` 覆盖
+
 ---
 
 ## 4. 配置与环境要点
@@ -225,6 +251,9 @@
 - 全局配置：`~/.config/fastgit/config.yaml`
 - 全局环境模板：`~/.config/fastgit/env.yaml`
 - 仓库本地覆盖：`<repo>/.git/fastgit.env`
+- 团队规则：`<repo>/.fastgit/policy.yaml`、`commit.yaml`、`check.yaml`（`fastgit team init` 生成）
+
+合并优先级：CLI flag > 仓库 `.fastgit/` > 本地 env > 全局配置 > 内置默认。
 
 ### 常见环境变量
 
@@ -232,6 +261,7 @@
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `GITHUB_TOKEN`
+- `FASTGIT_AI_CACHE`：设为 `1` 启用 diff 摘要缓存（`~/.config/fastgit/ai-cache/`）
 
 ---
 
@@ -239,8 +269,10 @@
 
 - 大部分 Git 行为依赖系统 `git` 命令，请确保本机可用。
 - `copilot` 相关功能依赖 Copilot SDK/CLI 运行环境。
+- `pr` 命令族依赖 `gh` CLI 已安装并登录，且分支需有 upstream。
+- AI 能力不可用时，`commit`/`pr`/`review`/`conflict` 自动降级为规则版输出。
 - `upgrade` 按当前 `GOOS/GOARCH` 过滤资产，不会跨平台安装。
-- 部分命令是交互式设计（例如 `tag`、`ggc interactive`、`history`），在非 TTY 下不可用。
+- 部分命令是交互式设计（例如 `tag`、`ggc interactive`、`history`、`pr merge`），在非 TTY 下不可用。
 
 ---
 

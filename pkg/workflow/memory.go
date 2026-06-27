@@ -163,6 +163,23 @@ func normalizeCommand(command string) string {
 	return parts[0]
 }
 
+// LastCommandName returns the most recently recorded command.
+func (m *Memory) LastCommandName() string {
+	if m == nil {
+		return ""
+	}
+	return normalizeCommand(m.data.LastCommand)
+}
+
+// RecommendFor returns next-step suggestions after a command name.
+func RecommendFor(command string) []string {
+	mem, err := NewMemory()
+	if err != nil {
+		return nil
+	}
+	return mem.Recommend(normalizeCommand(command))
+}
+
 // FormatHint renders recommendations for CLI output.
 func FormatHint(command string, recommendations []string) string {
 	if len(recommendations) == 0 {

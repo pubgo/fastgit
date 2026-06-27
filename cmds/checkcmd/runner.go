@@ -95,6 +95,22 @@ func runStep(ctx context.Context, step Step, opts RunOptions, stagedFiles []stri
 			return result
 		}
 	}
+	if opts.StagedOnly && step.Name == "vet" {
+		cmdStr = stagedVetCommand(stagedFiles)
+		if cmdStr == "" {
+			result.Skipped = true
+			result.Reason = "no staged Go packages"
+			return result
+		}
+	}
+	if opts.StagedOnly && step.Name == "test" {
+		cmdStr = stagedTestCommand(stagedFiles)
+		if cmdStr == "" {
+			result.Skipped = true
+			result.Reason = "no staged Go packages"
+			return result
+		}
+	}
 
 	if opts.DryRun {
 		result.Output = fmt.Sprintf("[dry-run] %s: %s", step.Name, cmdStr)

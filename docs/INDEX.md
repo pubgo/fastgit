@@ -7,7 +7,9 @@
 - `roadmap.md`：功能路线图、Issue 拆分建议、验收标准（DoD）
 - `copilot-dcos.md`：Copilot 融合开发的 DCOS 落地清单
 
-团队仓库规则见 `fastgit team init` 生成的 `.fastgit/*.yaml`，功能说明在 `features.md` §2.5。
+团队仓库规则见 `fastgit team init` 生成的 `.fastgit/*.yaml`（`policy` / `commit` / `check`），功能说明在 `features.md` §2.5；配置合并优先级与 `FASTGIT_AI_CACHE` 等环境变量见 `features.md` §4 与 `architecture.md` §4。
+
+本地改动到 PR 的闭环、质量门禁常驻见 `features.md` §3 场景 D/E。
 
 ## 推荐阅读顺序
 

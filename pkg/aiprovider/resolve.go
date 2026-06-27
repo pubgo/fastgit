@@ -57,18 +57,23 @@ func mergeOpenAIConfig(base, from *utils.OpenaiConfig) utils.OpenaiConfig {
 
 // ResolveProvider picks a provider chain by name: auto|openai|copilot.
 func ResolveProvider(name, workingDir string) Provider {
+	var provider Provider
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "openai":
-		return NewChain(OpenAIProviderFromConfig(), NewRuleFallback())
+		provider = NewChain(OpenAIProviderFromConfig(), NewRuleFallback())
 	case "copilot":
-		return NewCopilot(DefaultCopilotConfig(workingDir))
+		provider = NewCopilot(DefaultCopilotConfig(workingDir))
 	default:
-		return NewChain(
+		provider = NewChain(
 			OpenAIProviderFromConfig(),
 			NewCopilot(DefaultCopilotConfig(workingDir)),
 			NewRuleFallback(),
 		)
 	}
+	if cacheEnabled() {
+		return WithCache(provider)
+	}
+	return provider
 }
 
 // EnhanceText runs a completion and returns trimmed text, or the original on failure.

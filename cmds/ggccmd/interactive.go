@@ -3,11 +3,13 @@ package ggccmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lithammer/fuzzysearch/fuzzy"
+	"github.com/pubgo/fastgit/pkg/workflow"
 	"github.com/yarlson/tap"
 )
 
@@ -46,6 +48,9 @@ type interactiveModel struct {
 	activeWF  int
 	dirty     bool
 
+	hints      []string
+	hintSource string
+
 	result interactiveResult
 }
 
@@ -69,6 +74,7 @@ func newInteractiveModel(entries []CommandEntry, workflows [][]string) *interact
 		dirty:     false,
 		result:    interactiveResult{Action: actionNone},
 	}
+	m.refreshHints("")
 	m.applyFilter()
 	return m
 }
@@ -120,6 +126,7 @@ func (m *interactiveModel) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.filtered) > 0 {
 			m.workflows[m.activeWF] = append(m.workflows[m.activeWF], m.filtered[m.cursor].Key)
 			m.dirty = true
+			m.refreshHints(m.filtered[m.cursor].Key)
 		}
 	case tea.KeyEnter:
 		if len(m.filtered) > 0 {
@@ -258,7 +265,59 @@ func (m *interactiveModel) View() string {
 		}
 	}
 
+	if hint := m.renderHintLine(); hint != "" {
+		b.WriteString("\n")
+		b.WriteString(hint)
+	}
+
 	return b.String()
+}
+
+func (m *interactiveModel) refreshHints(lastStep string) {
+	lastStep = normalizeWorkflowKey(lastStep)
+	if lastStep == "" {
+		mem, err := workflow.NewMemory()
+		if err == nil && mem != nil {
+			lastStep = mem.LastCommandName()
+		}
+	}
+	if lastStep == "" {
+		m.hints = nil
+		m.hintSource = ""
+		return
+	}
+	m.hintSource = lastStep
+	m.hints = workflow.RecommendFor(lastStep)
+}
+
+func (m *interactiveModel) renderHintLine() string {
+	if len(m.hints) == 0 {
+		return ""
+	}
+	source := m.hintSource
+	if source == "" {
+		source = "workflow"
+	}
+	return workflow.FormatHint(source, m.hints)
+}
+
+func normalizeWorkflowKey(key string) string {
+	key = strings.TrimSpace(strings.ToLower(key))
+	key = strings.TrimPrefix(key, "fastgit ")
+	parts := strings.Fields(key)
+	if len(parts) == 0 {
+		return ""
+	}
+	if parts[0] == "check" {
+		return "check"
+	}
+	if parts[0] == "pr" {
+		return "pr"
+	}
+	if parts[0] == "changelog" {
+		return "changelog"
+	}
+	return parts[0]
 }
 
 func runInteractiveFlow(ctx context.Context, registry *Registry, store *StateStore) error {
@@ -288,14 +347,20 @@ func runInteractiveFlow(ctx context.Context, registry *Registry, store *StateSto
 
 	switch finalModel.result.Action {
 	case actionExecuteSelected:
-		return executeInteractiveCommand(ctx, registry, state, finalModel.result.SelectedKey, finalModel.result.SelectedUse)
+		if err := executeInteractiveCommand(ctx, registry, state, finalModel.result.SelectedKey, finalModel.result.SelectedUse); err != nil {
+			return err
+		}
+		workflow.PrintRecommendations(os.Stdout, normalizeWorkflowKey(finalModel.result.SelectedKey))
+		return nil
 	case actionExecuteWorkflow:
 		for _, step := range finalModel.result.Workflow {
 			fmt.Printf("\n>>> workflow step: %s\n", step)
 			if err := executeInteractiveCommand(ctx, registry, state, step, ""); err != nil {
 				return fmt.Errorf("workflow step %q failed: %w", step, err)
 			}
+			workflow.PrintRecommendations(os.Stdout, normalizeWorkflowKey(step))
 		}
+		return nil
 	}
 
 	return nil

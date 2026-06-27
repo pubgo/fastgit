@@ -24,6 +24,26 @@ func TestMatchesSensitivePath(t *testing.T) {
 	require.True(t, bundle.MatchesSensitivePath("config/secret.yaml"))
 }
 
+func TestCheckCommitMessageEnforce(t *testing.T) {
+	bundle := Bundle{
+		Commit: CommitSettings{MaxLength: 72},
+		Policy: Policy{Enforce: true},
+	}
+	bundle.Policy.Commit.Conventional = true
+
+	require.Error(t, bundle.CheckCommitMessage("bad message", false))
+	require.NoError(t, bundle.CheckCommitMessage("bad message", true))
+	require.NoError(t, bundle.CheckCommitMessage("feat: ok", false))
+}
+
+func TestCheckBranchEnforce(t *testing.T) {
+	bundle := Bundle{Policy: Policy{Enforce: true}}
+	bundle.Policy.Branch.Pattern = `^feature/`
+
+	require.Error(t, bundle.CheckBranch("main", false))
+	require.NoError(t, bundle.CheckBranch("main", true))
+}
+
 func TestValidateBranch(t *testing.T) {
 	bundle := Bundle{Policy: Policy{}}
 	bundle.Policy.Branch.Pattern = `^feature/[a-z0-9-]+$`
