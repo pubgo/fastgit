@@ -6,8 +6,8 @@
   --bg-main: #edf1f6;
   --bg-topbar: #e3e8f0;
   --bg-topbar-active: #f0f3f8;
-  --bg-sidebar: #243247;
-  --bg-sidebar-soft: #2f3f58;
+  --bg-sidebar: #dde3ec;
+  --bg-sidebar-soft: #e5eaf2;
   --bg-pane: #e3e7ef;
   --bg-pane-hover: #dbe2ec;
   --bg-card: #eef2f7;
@@ -17,16 +17,16 @@
   --text-1: #1f2d44;
   --text-2: #5f708b;
   --text-3: #8b9ab0;
-  --text-on-dark: #d6dfef;
-  --sidebar-icon: #8fa2bf;
-  --sidebar-icon-hover: #e4edfb;
-  --sidebar-footer: #96a9c7;
-  --sidebar-active-bg: rgba(90, 125, 177, 0.28);
-  --sidebar-active-border: rgba(164, 190, 232, 0.34);
+  --text-on-dark: #5f708b;
+  --sidebar-icon: #667b99;
+  --sidebar-icon-hover: #1f2d44;
+  --sidebar-footer: #7388a6;
+  --sidebar-active-bg: rgba(79, 127, 196, 0.16);
+  --sidebar-active-border: rgba(147, 175, 220, 0.52);
 
   --line: #bfcbdb;
   --line-strong: #adbbd1;
-  --line-dark: #3a4860;
+  --line-dark: #b8c4d6;
 
   --brand: #4f7fc4;
   --brand-strong: #3c679f;
