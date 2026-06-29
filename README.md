@@ -9,6 +9,27 @@ agentic git commit generate tool
 - 路线图文档：`docs/roadmap.md`
 - Copilot DCOS：`docs/copilot-dcos.md`
 
+## Desktop Client (Wails v3)
+
+- 桌面端代码位于：`desktop/`
+- 该子项目不会影响现有 CLI（`main.go` / `bootstrap.Main()` 保持不变）
+
+快速启动：
+
+```bash
+cd desktop
+go run github.com/wailsapp/wails/v3/cmd/wails3@latest generate bindings -clean=true -ts -i
+cd frontend && npm install && npm run build
+cd ..
+go run .
+```
+
+如果本机已安装 `wails3`，可直接在 `desktop/` 下执行：
+
+```bash
+wails3 dev
+```
+
 ## Command Overview
 - `fastgit commit`: AI 提交流程（保留原行为）
 - `fastgit commit ai`: AI 提交流程显式入口（新增）
