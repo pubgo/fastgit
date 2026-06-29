@@ -9,8 +9,16 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function GetModules(): $CancellablePromise<$models.DesktopModule[] | null> {
+    return $Call.ByID(1211788486);
+}
+
 export function GetRepoRoot(): $CancellablePromise<string> {
     return $Call.ByID(853311305);
+}
+
+export function RunAction(req: $models.ActionRunRequest): $CancellablePromise<$models.CommandResult> {
+    return $Call.ByID(465937298, req);
 }
 
 export function RunFastgit(commandLine: string): $CancellablePromise<$models.CommandResult> {

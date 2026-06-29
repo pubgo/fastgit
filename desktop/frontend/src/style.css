@@ -1,119 +1,194 @@
 :root {
-  color-scheme: light;
-  --bg: #f2f5f9;
-  --panel: #ffffff;
-  --text: #1f2b3a;
-  --muted: #607085;
-  --line: #d4dde8;
-  --primary: #1363df;
-  --primary-strong: #0f4ca8;
+  --bg-0: #f6f8fc;
+  --bg-1: #ffffff;
+  --line: #d9e1ed;
+  --text: #1a2330;
+  --muted: #617289;
+  --brand: #0f69d7;
+  --brand-2: #0b54ab;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: radial-gradient(circle at 0 0, #dfe8ff 0%, var(--bg) 42%);
+  font-family: "SF Pro Text", "Segoe UI", sans-serif;
   color: var(--text);
+  background:
+    radial-gradient(circle at 10% -20%, #ddeaff 0%, transparent 50%),
+    radial-gradient(circle at 95% -10%, #e4ffe9 0%, transparent 40%),
+    var(--bg-0);
 }
 
 .layout {
-  max-width: 980px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 24px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
-.header h1 {
+.hero h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 32px;
 }
 
-.header p {
-  margin: 6px 0 0;
+.hero p {
+  margin: 8px 0 0;
   color: var(--muted);
 }
 
-.panel {
-  background: var(--panel);
+.card {
+  background: var(--bg-1);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 14px;
 }
 
 .row {
   display: flex;
+  align-items: center;
+}
+
+.row.gap {
   gap: 8px;
 }
 
+label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 12px;
+  background: #fff;
 }
 
 .btn {
   border: 1px solid var(--line);
+  border-radius: 10px;
   background: #fff;
-  border-radius: 8px;
-  padding: 10px 14px;
+  color: var(--text);
   cursor: pointer;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.btn.small {
+  padding: 8px 12px;
 }
 
 .btn.primary {
   border-color: transparent;
-  background: var(--primary);
+  background: var(--brand);
   color: #fff;
 }
 
-.btn.primary:hover { background: var(--primary-strong); }
+.btn.primary:hover {
+  background: var(--brand-2);
+}
 
-.quick-actions {
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.module-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modules {
+  display: grid;
+  gap: 10px;
+}
+
+.module {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fbfdff;
+}
+
+.module-title h3 {
+  margin: 0;
+}
+
+.module-title p {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.action-row {
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
   margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.action-main strong {
+  display: block;
+  font-size: 14px;
+}
+
+.action-main span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.action-controls {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.chip {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fff;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-.output-panel { min-height: 320px; }
-
-.output-head {
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  margin-bottom: 8px;
+.action-controls .input {
+  width: 260px;
 }
 
 .output {
   margin: 0;
-  border-radius: 8px;
-  background: #0b1220;
-  color: #d7e0ef;
-  min-height: 250px;
-  padding: 12px;
+  min-height: 260px;
+  max-height: 420px;
   overflow: auto;
+  border-radius: 10px;
+  border: 1px solid #223149;
+  background: #0e1625;
+  color: #dae5fb;
+  padding: 12px;
 }
 
-small {
-  display: inline-block;
-  margin-top: 6px;
-  color: var(--muted);
-}
+@media (max-width: 780px) {
+  .layout {
+    padding: 14px;
+  }
 
-@media (max-width: 720px) {
-  .row {
+  .hero h1 {
+    font-size: 24px;
+  }
+
+  .row.gap {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-controls .input {
+    width: 100%;
   }
 }

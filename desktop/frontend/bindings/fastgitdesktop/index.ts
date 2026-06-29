@@ -7,5 +7,9 @@ export {
 };
 
 export type {
-    CommandResult
+    ActionField,
+    ActionRunRequest,
+    CommandResult,
+    DesktopModule,
+    ModuleAction
 } from "./models.js";
