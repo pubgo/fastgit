@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,7 +15,7 @@
     "@wailsio/runtime": "^3.0.0-alpha.18"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "vite": "^7.2.0"
+    "typescript": "^6.0.3",
+    "vite": "^8.1.0"
   }
 }
