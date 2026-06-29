@@ -1,0 +1,81 @@
+import type { SidebarMenuType } from "../app/types";
+
+const PREFS_KEY = "fastgit.desktop.prefs.v1";
+
+export interface DesktopPrefs {
+  selectedMenu: SidebarMenuType;
+  modulePaneWidth: number;
+  modulePaneCollapsed: boolean;
+}
+
+interface WorkspaceTabs {
+  openedModuleIds: string[];
+  selectedModuleId: string | null;
+}
+
+function canUseStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+export function loadPrefs(): Partial<DesktopPrefs> {
+  if (!canUseStorage()) {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PREFS_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as Partial<DesktopPrefs>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePrefs(prefs: DesktopPrefs): void {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+}
+
+function workspaceTabsKey(repoPath: string): string {
+  return `fastgit.desktop.tabs:${repoPath}`;
+}
+
+export function loadWorkspaceTabs(repoPath: string): WorkspaceTabs | null {
+  if (!canUseStorage() || !repoPath) {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(workspaceTabsKey(repoPath));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<WorkspaceTabs>;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      openedModuleIds: Array.isArray(parsed.openedModuleIds)
+        ? parsed.openedModuleIds.map((value) => String(value))
+        : [],
+      selectedModuleId: parsed.selectedModuleId ? String(parsed.selectedModuleId) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveWorkspaceTabs(repoPath: string, tabs: WorkspaceTabs): void {
+  if (!canUseStorage() || !repoPath) {
+    return;
+  }
+
+  window.localStorage.setItem(workspaceTabsKey(repoPath), JSON.stringify(tabs));
+}

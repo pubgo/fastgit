@@ -1,0 +1,61 @@
+.output-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.output-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.output-panel__header h2 {
+  font-size: 14px;
+}
+
+.output-panel__header p {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: 26px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.status-pill--ok {
+  color: var(--ok);
+  background: rgba(27, 155, 74, 0.08);
+  border-color: rgba(27, 155, 74, 0.25);
+}
+
+.status-pill--error {
+  color: var(--error);
+  background: rgba(216, 63, 87, 0.08);
+  border-color: rgba(216, 63, 87, 0.25);
+}
+
+.output-panel__body {
+  margin: 0;
+  min-height: 180px;
+  max-height: 30vh;
+  overflow: auto;
+  border: 1px solid #202d42;
+  border-radius: var(--radius-lg);
+  background: #0f1725;
+  color: #d4dff2;
+  padding: 11px;
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}

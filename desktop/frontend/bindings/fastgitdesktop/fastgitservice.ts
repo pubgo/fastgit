@@ -21,10 +21,6 @@ export function RunAction(req: $models.ActionRunRequest): $CancellablePromise<$m
     return $Call.ByID(465937298, req);
 }
 
-export function RunFastgit(commandLine: string): $CancellablePromise<$models.CommandResult> {
-    return $Call.ByID(848143838, commandLine);
-}
-
 export function SetRepoRoot(path: string): $CancellablePromise<void> {
     return $Call.ByID(2463093517, path);
 }

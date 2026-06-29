@@ -1,5 +1,8 @@
 # fastgit desktop (Wails v3)
 
+该桌面端当前采用“SDK/方法调用”模型，不再通过输入命令字符串再解析执行。
+前端采用 React + feature 分层组织（参考 colanode 的 app/layout/features 结构）。
+
 ## Quick Tasks (from repo root)
 
 ```bash

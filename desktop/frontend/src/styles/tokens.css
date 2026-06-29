@@ -1,0 +1,43 @@
+:root {
+  --font-heading: "Sora", "Avenir Next", sans-serif;
+  --font-body: "Manrope", "PingFang SC", "Segoe UI", sans-serif;
+
+  --bg-app: #e0e5ed;
+  --bg-main: #edf1f6;
+  --bg-topbar: #e3e8f0;
+  --bg-topbar-active: #f0f3f8;
+  --bg-sidebar: #243247;
+  --bg-sidebar-soft: #2f3f58;
+  --bg-pane: #e3e7ef;
+  --bg-pane-hover: #dbe2ec;
+  --bg-card: #eef2f7;
+  --bg-card-soft: #dde3ed;
+  --bg-input: #edf1f6;
+
+  --text-1: #1f2d44;
+  --text-2: #5f708b;
+  --text-3: #8b9ab0;
+  --text-on-dark: #d6dfef;
+  --sidebar-icon: #8fa2bf;
+  --sidebar-icon-hover: #e4edfb;
+  --sidebar-footer: #96a9c7;
+  --sidebar-active-bg: rgba(90, 125, 177, 0.28);
+  --sidebar-active-border: rgba(164, 190, 232, 0.34);
+
+  --line: #bfcbdb;
+  --line-strong: #adbbd1;
+  --line-dark: #3a4860;
+
+  --brand: #4f7fc4;
+  --brand-strong: #3c679f;
+  --accent: #13ad9f;
+
+  --ok: #1b9b4a;
+  --error: #d83f57;
+
+  --radius-xl: 14px;
+  --radius-lg: 11px;
+  --radius-md: 9px;
+
+  --shadow-card: 0 8px 26px rgba(18, 28, 44, 0.08);
+}

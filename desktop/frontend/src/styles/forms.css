@@ -1,0 +1,68 @@
+.ui-button {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  min-height: 36px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  background: var(--bg-topbar-active);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ui-button:hover {
+  border-color: var(--line-strong);
+  background: var(--bg-pane-hover);
+}
+
+.ui-button--primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--brand);
+}
+
+.ui-button--primary:hover {
+  background: var(--brand-strong);
+  border-color: transparent;
+}
+
+.ui-button--ghost {
+  background: transparent;
+}
+
+.ui-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  min-height: 36px;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-input);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ui-input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(79, 127, 196, 0.18);
+}
+
+.action-field {
+  display: grid;
+  gap: 4px;
+}
+
+.action-field span {
+  color: var(--text-2);
+  font-size: 12px;
+}

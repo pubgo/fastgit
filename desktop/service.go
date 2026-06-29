@@ -4,11 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	git "github.com/go-git/go-git/v6"
+	gitconfig "github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/client"
+	httptransport "github.com/go-git/go-git/v6/plumbing/transport/http"
+	"github.com/google/go-github/v71/github"
+	"golang.org/x/oauth2"
 )
 
 type CommandResult struct {
@@ -31,8 +41,6 @@ type ModuleAction struct {
 	ID          string        `json:"id"`
 	Title       string        `json:"title"`
 	Description string        `json:"description"`
-	Tool        string        `json:"tool"`
-	Args        []string      `json:"args"`
 	Fields      []ActionField `json:"fields"`
 }
 
@@ -84,6 +92,9 @@ func (s *FastgitService) SetRepoRoot(path string) error {
 	if !st.IsDir() {
 		return fmt.Errorf("%s is not a directory", abs)
 	}
+	if _, err := git.PlainOpenWithOptions(abs, &git.PlainOpenOptions{DetectDotGit: true}); err != nil {
+		return fmt.Errorf("%s is not a git repository: %w", abs, err)
+	}
 	s.repoRoot = abs
 	return nil
 }
@@ -93,132 +104,240 @@ func (s *FastgitService) GetModules() []DesktopModule {
 		{
 			ID:          "repo",
 			Title:       "仓库管理",
-			Description: "查看状态、拉取、推送",
+			Description: "状态 / 拉取 / 推送",
 			Actions: []ModuleAction{
-				{ID: "repo_status", Title: "状态", Description: "ggc status short", Tool: "fastgit", Args: []string{"ggc", "status", "short"}},
-				{ID: "repo_pull", Title: "拉取", Description: "pull current branch", Tool: "fastgit", Args: []string{"pull"}},
-				{ID: "repo_push", Title: "推送", Description: "push current branch", Tool: "fastgit", Args: []string{"push"}},
+				{ID: "repo_status", Title: "状态", Description: "显示工作区状态"},
+				{ID: "repo_pull", Title: "拉取", Description: "拉取当前分支"},
+				{ID: "repo_push", Title: "推送", Description: "推送当前分支"},
 			},
 		},
 		{
 			ID:          "branch",
 			Title:       "分支管理",
-			Description: "列举、创建、切换、删除分支",
+			Description: "列出 / 创建 / 切换 / 删除",
 			Actions: []ModuleAction{
-				{ID: "branch_list", Title: "列出本地分支", Description: "ggc branch list local", Tool: "fastgit", Args: []string{"ggc", "branch", "list", "local"}},
-				{ID: "branch_create", Title: "创建分支", Description: "ggc branch create <name>", Tool: "fastgit", Args: []string{"ggc", "branch", "create", "{{name}}"}, Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
-				{ID: "branch_checkout", Title: "切换分支", Description: "ggc branch checkout <name>", Tool: "fastgit", Args: []string{"ggc", "branch", "checkout", "{{name}}"}, Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
-				{ID: "branch_delete", Title: "删除分支", Description: "ggc branch delete <name>", Tool: "fastgit", Args: []string{"ggc", "branch", "delete", "{{name}}"}, Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
+				{ID: "branch_list", Title: "列出本地分支", Description: "显示本地分支列表"},
+				{ID: "branch_create", Title: "创建分支", Description: "创建新分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
+				{ID: "branch_checkout", Title: "切换分支", Description: "切换到指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
+				{ID: "branch_delete", Title: "删除分支", Description: "删除指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
 			},
 		},
 		{
 			ID:          "worktree",
 			Title:       "Worktree 管理",
-			Description: "列出、创建、删除 worktree",
+			Description: "列出 / 创建 / 删除",
 			Actions: []ModuleAction{
-				{ID: "worktree_list", Title: "列出 worktree", Description: "worktree list", Tool: "fastgit", Args: []string{"worktree", "list"}},
-				{ID: "worktree_create", Title: "创建 worktree", Description: "worktree create <issue|branch> --base <branch>", Tool: "fastgit", Args: []string{"worktree", "create", "--base", "{{base}}", "{{target}}"}, Fields: []ActionField{{Key: "target", Label: "issue/branch", Placeholder: "123 或 feature/abc", Required: true}, {Key: "base", Label: "base", Placeholder: "main", Required: true, Default: "main"}}},
-				{ID: "worktree_remove", Title: "删除 worktree", Description: "worktree remove <issue|branch>", Tool: "fastgit", Args: []string{"worktree", "remove", "{{target}}"}, Fields: []ActionField{{Key: "target", Label: "issue/branch", Placeholder: "123 或 feature/abc", Required: true}}},
+				{ID: "worktree_list", Title: "列出 worktree", Description: "查看所有 worktree"},
+				{ID: "worktree_create", Title: "创建 worktree", Description: "根据 issue/branch 创建", Fields: []ActionField{{Key: "target", Label: "issue/branch", Placeholder: "123 或 feature/abc", Required: true}, {Key: "base", Label: "base", Placeholder: "main", Required: true, Default: "main"}}},
+				{ID: "worktree_remove", Title: "删除 worktree", Description: "删除指定 worktree", Fields: []ActionField{{Key: "target", Label: "issue/branch", Placeholder: "123 或 feature/abc", Required: true}}},
 			},
 		},
 		{
 			ID:          "issue",
 			Title:       "Issue 管理",
-			Description: "通过 gh CLI 进行 issue 查询与创建",
+			Description: "GitHub API（需 GITHUB_TOKEN）",
 			Actions: []ModuleAction{
-				{ID: "issue_list", Title: "列出 issue", Description: "gh issue list --limit 30", Tool: "gh", Args: []string{"issue", "list", "--limit", "30"}},
-				{ID: "issue_view", Title: "查看 issue", Description: "gh issue view <id>", Tool: "gh", Args: []string{"issue", "view", "{{id}}"}, Fields: []ActionField{{Key: "id", Label: "Issue ID", Placeholder: "123", Required: true}}},
-				{ID: "issue_create", Title: "创建 issue", Description: "gh issue create", Tool: "gh", Args: []string{"issue", "create", "--title", "{{title}}", "--body", "{{body}}"}, Fields: []ActionField{{Key: "title", Label: "标题", Placeholder: "Issue title", Required: true}, {Key: "body", Label: "正文", Placeholder: "Issue body", Required: true}}},
+				{ID: "issue_list", Title: "列出 issue", Description: "列出 open issue"},
+				{ID: "issue_view", Title: "查看 issue", Description: "查看 issue 详情", Fields: []ActionField{{Key: "id", Label: "Issue ID", Placeholder: "123", Required: true}}},
+				{ID: "issue_create", Title: "创建 issue", Description: "创建 issue", Fields: []ActionField{{Key: "title", Label: "标题", Placeholder: "Issue title", Required: true}, {Key: "body", Label: "正文", Placeholder: "Issue body", Required: true}}},
 			},
 		},
 		{
 			ID:          "pr",
 			Title:       "PR 管理",
-			Description: "create/status/sync/merge",
+			Description: "GitHub API（需 GITHUB_TOKEN）",
 			Actions: []ModuleAction{
-				{ID: "pr_status", Title: "PR 状态", Description: "fastgit pr status", Tool: "fastgit", Args: []string{"pr", "status"}},
-				{ID: "pr_create", Title: "创建 PR", Description: "fastgit pr create", Tool: "fastgit", Args: []string{"pr", "create"}},
-				{ID: "pr_sync", Title: "同步 PR", Description: "fastgit pr sync", Tool: "fastgit", Args: []string{"pr", "sync"}},
-				{ID: "pr_merge", Title: "合并 PR", Description: "fastgit pr merge --method <method> --yes", Tool: "fastgit", Args: []string{"pr", "merge", "--method", "{{method}}", "--yes"}, Fields: []ActionField{{Key: "method", Label: "merge method", Placeholder: "squash|merge|rebase", Required: true, Default: "squash"}}},
+				{ID: "pr_status", Title: "PR 状态", Description: "查看当前分支对应 PR"},
+				{ID: "pr_create", Title: "创建 PR", Description: "为当前分支创建 PR"},
+				{ID: "pr_sync", Title: "同步 PR 内容", Description: "更新当前分支 PR 标题与正文"},
+				{ID: "pr_merge", Title: "合并 PR", Description: "合并当前分支 PR", Fields: []ActionField{{Key: "method", Label: "merge method", Placeholder: "squash|merge|rebase", Required: true, Default: "squash"}}},
 			},
 		},
 		{
 			ID:          "tag",
 			Title:       "Tag 管理",
-			Description: "查看和发布 tag",
+			Description: "列出 / 创建 / 推送",
 			Actions: []ModuleAction{
-				{ID: "tag_list", Title: "列出 tag", Description: "git tag --sort=-committerdate", Tool: "git", Args: []string{"tag", "--sort=-committerdate"}},
-				{ID: "tag_publish", Title: "发布 tag", Description: "git tag <name> && git push origin <name>", Tool: "git", Args: []string{"tag", "{{name}}"}, Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
-				{ID: "tag_push", Title: "推送 tag", Description: "git push origin <name>", Tool: "git", Args: []string{"push", "origin", "{{name}}"}, Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
+				{ID: "tag_list", Title: "列出 tag", Description: "列出本地 tags"},
+				{ID: "tag_publish", Title: "创建 tag", Description: "在当前 HEAD 创建 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
+				{ID: "tag_push", Title: "推送 tag", Description: "推送指定 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
 			},
 		},
 	}
 }
 
 func (s *FastgitService) RunAction(req ActionRunRequest) (CommandResult, error) {
-	module, action, err := s.findAction(req.ModuleID, req.ActionID)
+	_, action, err := s.findAction(req.ModuleID, req.ActionID)
 	if err != nil {
 		return CommandResult{}, err
 	}
-	_ = module
-	values := req.Values
+	values := normalizeValues(req.Values)
+
+	started := time.Now().UTC()
+	result := CommandResult{
+		Command:   fmt.Sprintf("sdk/%s/%s", req.ModuleID, req.ActionID),
+		StartedAt: started.Format(time.RFC3339),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	output, err := s.dispatchAction(ctx, action.ID, values)
+	result.EndedAt = time.Now().UTC().Format(time.RFC3339)
+	if err != nil {
+		result.ExitCode = 1
+		if strings.TrimSpace(output) == "" {
+			output = err.Error()
+		}
+		result.Output = output
+		return result, nil
+	}
+
+	result.ExitCode = 0
+	result.Output = strings.TrimSpace(output)
+	if result.Output == "" {
+		result.Output = "ok"
+	}
+	return result, nil
+}
+
+func normalizeValues(values map[string]string) map[string]string {
 	if values == nil {
-		values = map[string]string{}
+		return map[string]string{}
 	}
-
-	expandedArgs, err := fillActionArgs(action, values)
-	if err != nil {
-		return CommandResult{}, err
-	}
-
-	return s.runTool(action.Tool, expandedArgs)
-}
-
-func (s *FastgitService) RunFastgit(commandLine string) (CommandResult, error) {
-	line := strings.TrimSpace(commandLine)
-	if line == "" {
-		return CommandResult{}, errors.New("command cannot be empty")
-	}
-	args := strings.Fields(line)
-	if len(args) == 0 {
-		return CommandResult{}, errors.New("invalid command")
-	}
-	return s.runTool("fastgit", args)
-}
-
-func fillActionArgs(action ModuleAction, values map[string]string) ([]string, error) {
-	normalized := make(map[string]string, len(values))
+	out := make(map[string]string, len(values))
 	for k, v := range values {
-		normalized[k] = strings.TrimSpace(v)
+		out[k] = strings.TrimSpace(v)
 	}
+	return out
+}
 
-	for _, field := range action.Fields {
-		val := normalized[field.Key]
-		if val == "" && field.Default != "" {
-			val = field.Default
-			normalized[field.Key] = val
+func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, values map[string]string) (string, error) {
+	switch actionID {
+	case "repo_status":
+		return s.repoStatus(ctx)
+	case "repo_pull":
+		return s.repoPull(ctx)
+	case "repo_push":
+		return s.repoPush(ctx)
+	case "branch_list":
+		return s.branchList(ctx)
+	case "branch_create":
+		name, err := requiredValue(values, "name", "分支名")
+		if err != nil {
+			return "", err
 		}
-		if field.Required && val == "" {
-			return nil, fmt.Errorf("missing required field: %s", field.Label)
+		return s.branchCreate(ctx, name)
+	case "branch_checkout":
+		name, err := requiredValue(values, "name", "分支名")
+		if err != nil {
+			return "", err
 		}
+		return s.branchCheckout(ctx, name)
+	case "branch_delete":
+		name, err := requiredValue(values, "name", "分支名")
+		if err != nil {
+			return "", err
+		}
+		return s.branchDelete(ctx, name)
+	case "worktree_list":
+		return s.worktreeList(ctx)
+	case "worktree_create":
+		target, err := requiredValue(values, "target", "issue/branch")
+		if err != nil {
+			return "", err
+		}
+		base := optionalValue(values, "base", "main")
+		return s.worktreeCreate(ctx, target, base)
+	case "worktree_remove":
+		target, err := requiredValue(values, "target", "issue/branch")
+		if err != nil {
+			return "", err
+		}
+		return s.worktreeRemove(ctx, target)
+	case "issue_list":
+		return s.issueList(ctx)
+	case "issue_view":
+		id, err := requiredInt(values, "id", "Issue ID")
+		if err != nil {
+			return "", err
+		}
+		return s.issueView(ctx, id)
+	case "issue_create":
+		title, err := requiredValue(values, "title", "标题")
+		if err != nil {
+			return "", err
+		}
+		body, err := requiredValue(values, "body", "正文")
+		if err != nil {
+			return "", err
+		}
+		return s.issueCreate(ctx, title, body)
+	case "pr_status":
+		return s.prStatus(ctx)
+	case "pr_create":
+		return s.prCreate(ctx)
+	case "pr_sync":
+		return s.prSync(ctx)
+	case "pr_merge":
+		method := optionalValue(values, "method", "squash")
+		return s.prMerge(ctx, method)
+	case "tag_list":
+		return s.tagList(ctx)
+	case "tag_publish":
+		name, err := requiredValue(values, "name", "Tag")
+		if err != nil {
+			return "", err
+		}
+		return s.tagPublish(ctx, name)
+	case "tag_push":
+		name, err := requiredValue(values, "name", "Tag")
+		if err != nil {
+			return "", err
+		}
+		return s.tagPush(ctx, name)
+	default:
+		return "", fmt.Errorf("unsupported action: %s", actionID)
 	}
+}
 
-	expanded := make([]string, 0, len(action.Args))
-	for _, item := range action.Args {
-		replaced := item
-		for key, value := range normalized {
-			replaced = strings.ReplaceAll(replaced, "{{"+key+"}}", value)
-		}
-		if strings.Contains(replaced, "{{") {
-			return nil, fmt.Errorf("unresolved parameter in args: %s", item)
-		}
-		replaced = strings.TrimSpace(replaced)
-		if replaced != "" {
-			expanded = append(expanded, replaced)
-		}
+func requiredValue(values map[string]string, key, label string) (string, error) {
+	v := strings.TrimSpace(values[key])
+	if v == "" {
+		return "", fmt.Errorf("%s 不能为空", label)
 	}
+	return v, nil
+}
 
-	return expanded, nil
+func optionalValue(values map[string]string, key, def string) string {
+	v := strings.TrimSpace(values[key])
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+func requiredInt(values map[string]string, key, label string) (int, error) {
+	raw, err := requiredValue(values, key, label)
+	if err != nil {
+		return 0, err
+	}
+	n, convErr := strconvAtoi(raw)
+	if convErr != nil {
+		return 0, fmt.Errorf("%s 不是有效数字", label)
+	}
+	return n, nil
+}
+
+func strconvAtoi(v string) (int, error) {
+	var out int
+	for _, ch := range v {
+		if ch < '0' || ch > '9' {
+			return 0, errors.New("invalid number")
+		}
+		out = out*10 + int(ch-'0')
+	}
+	return out, nil
 }
 
 func (s *FastgitService) findAction(moduleID, actionID string) (DesktopModule, ModuleAction, error) {
@@ -236,70 +355,563 @@ func (s *FastgitService) findAction(moduleID, actionID string) (DesktopModule, M
 	return DesktopModule{}, ModuleAction{}, fmt.Errorf("module not found: %s", moduleID)
 }
 
-func (s *FastgitService) runTool(tool string, args []string) (CommandResult, error) {
-	now := time.Now().UTC()
-	result := CommandResult{StartedAt: now.Format(time.RFC3339)}
-
-	bin, execArgs, err := s.resolveInvocation(tool, args)
+func (s *FastgitService) openRepo() (*git.Repository, error) {
+	repo, err := git.PlainOpenWithOptions(s.repoRoot, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("open repo failed: %w", err)
 	}
-	result.Command = strings.Join(append([]string{bin}, execArgs...), " ")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, bin, execArgs...)
-	cmd.Dir = s.repoRoot
-	output, runErr := cmd.CombinedOutput()
-
-	result.Output = strings.TrimSpace(string(output))
-	result.EndedAt = time.Now().UTC().Format(time.RFC3339)
-
-	if runErr == nil {
-		result.ExitCode = 0
-		return result, nil
-	}
-
-	var exitErr *exec.ExitError
-	if errors.As(runErr, &exitErr) {
-		result.ExitCode = exitErr.ExitCode()
-		if result.Output == "" {
-			result.Output = runErr.Error()
-		}
-		return result, nil
-	}
-
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		result.ExitCode = 124
-		if result.Output == "" {
-			result.Output = "command timed out after 2m"
-		}
-		return result, nil
-	}
-
-	return result, runErr
+	return repo, nil
 }
 
-func (s *FastgitService) resolveInvocation(tool string, args []string) (string, []string, error) {
-	switch tool {
-	case "fastgit":
-		if path, err := exec.LookPath("fastgit"); err == nil {
-			return path, args, nil
-		}
-		if path, err := exec.LookPath("go"); err == nil {
-			fallback := []string{"run", "."}
-			fallback = append(fallback, args...)
-			return path, fallback, nil
-		}
-		return "", nil, errors.New("cannot find fastgit binary or go toolchain in PATH")
-	case "git", "gh":
-		path, err := exec.LookPath(tool)
-		if err != nil {
-			return "", nil, fmt.Errorf("cannot find %s in PATH", tool)
-		}
-		return path, args, nil
-	default:
-		return "", nil, fmt.Errorf("unsupported tool: %s", tool)
+func (s *FastgitService) currentBranch(repo *git.Repository) (string, error) {
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
 	}
+	if !head.Name().IsBranch() {
+		return "", fmt.Errorf("detached HEAD")
+	}
+	return head.Name().Short(), nil
+}
+
+func (s *FastgitService) repoStatus(ctx context.Context) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	status, err := wt.Status()
+	if err != nil {
+		return "", err
+	}
+	if status.IsClean() {
+		return "working tree clean", nil
+	}
+
+	keys := make([]string, 0, len(status))
+	for path := range status {
+		keys = append(keys, path)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for _, path := range keys {
+		st := status[path]
+		fmt.Fprintf(&b, "%c%c %s\n", st.Staging, st.Worktree, path)
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	branch, err := s.currentBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	opts := &git.PullOptions{
+		RemoteName:    "origin",
+		ReferenceName: plumbing.NewBranchReferenceName(branch),
+		SingleBranch:  true,
+		ClientOptions: s.clientOptions(repo),
+	}
+	if err := wt.PullContext(ctx, opts); err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "already up-to-date", nil
+		}
+		return "", err
+	}
+	return "pull completed", nil
+}
+
+func (s *FastgitService) repoPush(ctx context.Context) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	err = repo.PushContext(ctx, &git.PushOptions{RemoteName: "origin", ClientOptions: s.clientOptions(repo)})
+	if err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "already up-to-date", nil
+		}
+		return "", err
+	}
+	return "push completed", nil
+}
+
+func (s *FastgitService) branchList(ctx context.Context) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	current, err := s.currentBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	iter, err := repo.Branches()
+	if err != nil {
+		return "", err
+	}
+	branches := make([]string, 0)
+	_ = iter.ForEach(func(ref *plumbing.Reference) error {
+		branches = append(branches, ref.Name().Short())
+		return nil
+	})
+	sort.Strings(branches)
+	var b strings.Builder
+	for _, name := range branches {
+		prefix := "  "
+		if name == current {
+			prefix = "* "
+		}
+		b.WriteString(prefix + name + "\n")
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+func (s *FastgitService) branchCreate(ctx context.Context, name string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if !head.Name().IsBranch() {
+		return "", fmt.Errorf("detached HEAD")
+	}
+	refName := plumbing.NewBranchReferenceName(name)
+	if _, err := repo.Reference(refName, true); err == nil {
+		return "", fmt.Errorf("branch exists: %s", name)
+	}
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(refName, head.Hash())); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("branch created: %s", name), nil
+}
+
+func (s *FastgitService) branchCheckout(ctx context.Context, name string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	refName := plumbing.NewBranchReferenceName(name)
+	if err := wt.Checkout(&git.CheckoutOptions{Branch: refName}); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("checked out: %s", name), nil
+}
+
+func (s *FastgitService) branchDelete(ctx context.Context, name string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	current, err := s.currentBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	if current == name {
+		return "", fmt.Errorf("cannot delete current branch: %s", name)
+	}
+	if err := repo.Storer.RemoveReference(plumbing.NewBranchReferenceName(name)); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("branch deleted: %s", name), nil
+}
+
+func (s *FastgitService) worktreeList(ctx context.Context) (string, error) {
+	out, err := s.gitInRepo(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(out) == "" {
+		return "no worktree", nil
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (s *FastgitService) worktreeCreate(ctx context.Context, target, base string) (string, error) {
+	repoTop, err := s.gitInRepo(ctx, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	repoTop = strings.TrimSpace(repoTop)
+	repoName := filepath.Base(repoTop)
+	branchName, suffix := determineWorktreeNames(target)
+	worktreePath := filepath.Join(filepath.Dir(repoTop), fmt.Sprintf("%s-%s", repoName, suffix))
+	if _, err := s.gitInRepo(ctx, "worktree", "add", worktreePath, "-b", branchName, base); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("created worktree: %s", worktreePath), nil
+}
+
+func (s *FastgitService) worktreeRemove(ctx context.Context, target string) (string, error) {
+	repoTop, err := s.gitInRepo(ctx, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	repoTop = strings.TrimSpace(repoTop)
+	repoName := filepath.Base(repoTop)
+	_, suffix := determineWorktreeNames(target)
+	worktreePath := filepath.Join(filepath.Dir(repoTop), fmt.Sprintf("%s-%s", repoName, suffix))
+	if _, err := s.gitInRepo(ctx, "worktree", "remove", worktreePath); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("removed worktree: %s", worktreePath), nil
+}
+
+func determineWorktreeNames(input string) (branchName, dirSuffix string) {
+	if strings.Contains(input, "/") {
+		branchName = input
+		dirSuffix = sanitizeBranchName(input)
+		return
+	}
+	branchName = input + "/impl"
+	dirSuffix = input
+	return
+}
+
+func sanitizeBranchName(v string) string {
+	replacer := strings.NewReplacer(
+		"/", "-",
+		"\\", "-",
+		"*", "-",
+		"?", "-",
+		":", "-",
+		"<", "-",
+		">", "-",
+		"\"", "-",
+		"|", "-",
+	)
+	s := replacer.Replace(v)
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	return strings.Trim(s, "-")
+}
+
+func (s *FastgitService) gitInRepo(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = s.repoRoot
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
+}
+
+func (s *FastgitService) issueList(ctx context.Context) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	issues, _, err := client.Issues.ListByRepo(ctx, owner, repoName, &github.IssueListByRepoOptions{State: "open", ListOptions: github.ListOptions{PerPage: 30}})
+	if err != nil {
+		return "", err
+	}
+	if len(issues) == 0 {
+		return "no open issues", nil
+	}
+	var b strings.Builder
+	for _, it := range issues {
+		if it.GetPullRequestLinks() != nil {
+			continue
+		}
+		fmt.Fprintf(&b, "#%d [%s] %s\n", it.GetNumber(), it.GetState(), it.GetTitle())
+	}
+	if strings.TrimSpace(b.String()) == "" {
+		return "no open issues", nil
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+func (s *FastgitService) issueView(ctx context.Context, number int) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	issue, _, err := client.Issues.Get(ctx, owner, repoName, number)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("#%d [%s]\n%s\n\n%s", issue.GetNumber(), issue.GetState(), issue.GetTitle(), strings.TrimSpace(issue.GetBody())), nil
+}
+
+func (s *FastgitService) issueCreate(ctx context.Context, title, body string) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	req := &github.IssueRequest{Title: github.Ptr(title), Body: github.Ptr(body)}
+	issue, _, err := client.Issues.Create(ctx, owner, repoName, req)
+	if err != nil {
+		return "", err
+	}
+	return issue.GetHTMLURL(), nil
+}
+
+func (s *FastgitService) prStatus(ctx context.Context) (string, error) {
+	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	pr, err := s.findPRForBranch(ctx, owner, repoName, client, branch)
+	if err != nil {
+		return "", err
+	}
+	if pr == nil {
+		return "no open PR for current branch", nil
+	}
+	return fmt.Sprintf("#%d [%s]\n%s\n%s", pr.GetNumber(), pr.GetState(), pr.GetTitle(), pr.GetHTMLURL()), nil
+}
+
+func (s *FastgitService) prCreate(ctx context.Context) (string, error) {
+	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	if existing, err := s.findPRForBranch(ctx, owner, repoName, client, branch); err == nil && existing != nil {
+		return fmt.Sprintf("PR already exists: %s", existing.GetHTMLURL()), nil
+	}
+
+	repoInfo, _, err := client.Repositories.Get(ctx, owner, repoName)
+	if err != nil {
+		return "", err
+	}
+	base := repoInfo.GetDefaultBranch()
+	title := "Update " + branch
+	body := "Generated by fastgit desktop SDK layer"
+
+	newPR := &github.NewPullRequest{Title: github.Ptr(title), Head: github.Ptr(branch), Base: github.Ptr(base), Body: github.Ptr(body)}
+	created, _, err := client.PullRequests.Create(ctx, owner, repoName, newPR)
+	if err != nil {
+		return "", err
+	}
+	return created.GetHTMLURL(), nil
+}
+
+func (s *FastgitService) prSync(ctx context.Context) (string, error) {
+	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	pr, err := s.findPRForBranch(ctx, owner, repoName, client, branch)
+	if err != nil {
+		return "", err
+	}
+	if pr == nil {
+		return "no open PR for current branch", nil
+	}
+	title := "Update " + branch
+	body := "Updated by fastgit desktop SDK layer"
+	edited := &github.PullRequest{Title: github.Ptr(title), Body: github.Ptr(body)}
+	updated, _, err := client.PullRequests.Edit(ctx, owner, repoName, pr.GetNumber(), edited)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("PR updated: %s", updated.GetHTMLURL()), nil
+}
+
+func (s *FastgitService) prMerge(ctx context.Context, method string) (string, error) {
+	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	pr, err := s.findPRForBranch(ctx, owner, repoName, client, branch)
+	if err != nil {
+		return "", err
+	}
+	if pr == nil {
+		return "", fmt.Errorf("no open PR for current branch")
+	}
+	method = strings.ToLower(strings.TrimSpace(method))
+	if method == "" {
+		method = "squash"
+	}
+	if method != "squash" && method != "merge" && method != "rebase" {
+		return "", fmt.Errorf("unsupported merge method: %s", method)
+	}
+	res, _, err := client.PullRequests.Merge(ctx, owner, repoName, pr.GetNumber(), "", &github.PullRequestOptions{MergeMethod: method})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("merged=%v message=%s", res.GetMerged(), res.GetMessage()), nil
+}
+
+func (s *FastgitService) tagList(ctx context.Context) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	iter, err := repo.Tags()
+	if err != nil {
+		return "", err
+	}
+	tags := make([]string, 0)
+	_ = iter.ForEach(func(ref *plumbing.Reference) error {
+		tags = append(tags, ref.Name().Short())
+		return nil
+	})
+	if len(tags) == 0 {
+		return "no tags", nil
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(tags)))
+	return strings.Join(tags, "\n"), nil
+}
+
+func (s *FastgitService) tagPublish(ctx context.Context, name string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if _, err := repo.CreateTag(name, head.Hash(), nil); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("tag created: %s", name), nil
+}
+
+func (s *FastgitService) tagPush(ctx context.Context, name string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	refSpec := gitconfig.RefSpec(fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
+	err = repo.PushContext(ctx, &git.PushOptions{
+		RemoteName:    "origin",
+		RefSpecs:      []gitconfig.RefSpec{refSpec},
+		ClientOptions: s.clientOptions(repo),
+	})
+	if err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "already up-to-date", nil
+		}
+		return "", err
+	}
+	return fmt.Sprintf("tag pushed: %s", name), nil
+}
+
+func (s *FastgitService) githubClient(ctx context.Context) (owner, repoName string, client *github.Client, err error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", "", nil, err
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("origin remote not found: %w", err)
+	}
+	urls := remote.Config().URLs
+	if len(urls) == 0 {
+		return "", "", nil, fmt.Errorf("origin remote has no URL")
+	}
+	owner, repoName, err = parseGitHubRemote(urls[0])
+	if err != nil {
+		return "", "", nil, err
+	}
+	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("GH_TOKEN"))
+	}
+	if token == "" {
+		return "", "", nil, fmt.Errorf("GITHUB_TOKEN/GH_TOKEN is required for GitHub API operations")
+	}
+	tok := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	httpClient := oauth2.NewClient(ctx, tok)
+	return owner, repoName, github.NewClient(httpClient), nil
+}
+
+func (s *FastgitService) githubBranchClient(ctx context.Context) (owner, repoName string, client *github.Client, branch string, err error) {
+	owner, repoName, client, err = s.githubClient(ctx)
+	if err != nil {
+		return "", "", nil, "", err
+	}
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", "", nil, "", err
+	}
+	branch, err = s.currentBranch(repo)
+	if err != nil {
+		return "", "", nil, "", err
+	}
+	return owner, repoName, client, branch, nil
+}
+
+func (s *FastgitService) findPRForBranch(ctx context.Context, owner, repoName string, client *github.Client, branch string) (*github.PullRequest, error) {
+	prs, _, err := client.PullRequests.List(ctx, owner, repoName, &github.PullRequestListOptions{State: "open", Head: owner + ":" + branch, ListOptions: github.ListOptions{PerPage: 20}})
+	if err != nil {
+		return nil, err
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+	return prs[0], nil
+}
+
+func parseGitHubRemote(remote string) (owner, repo string, err error) {
+	remote = strings.TrimSpace(strings.TrimSuffix(remote, ".git"))
+	var path string
+
+	switch {
+	case strings.HasPrefix(remote, "git@github.com:"):
+		path = strings.TrimPrefix(remote, "git@github.com:")
+	case strings.HasPrefix(remote, "ssh://git@github.com/"):
+		path = strings.TrimPrefix(remote, "ssh://git@github.com/")
+	default:
+		u, parseErr := neturl.Parse(remote)
+		if parseErr != nil {
+			return "", "", fmt.Errorf("parse remote URL failed: %w", parseErr)
+		}
+		if !strings.EqualFold(u.Hostname(), "github.com") {
+			return "", "", fmt.Errorf("only github.com is supported in desktop GitHub API mode")
+		}
+		path = strings.TrimPrefix(u.Path, "/")
+	}
+
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("invalid GitHub remote: %s", remote)
+	}
+	return parts[0], parts[1], nil
+}
+
+func (s *FastgitService) clientOptions(repo *git.Repository) []client.Option {
+	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("GH_TOKEN"))
+	}
+	if token == "" {
+		return nil
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
+		return nil
+	}
+	url := strings.ToLower(strings.TrimSpace(remote.Config().URLs[0]))
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return []client.Option{client.WithHTTPAuth(&httptransport.TokenAuth{Token: token})}
+	}
+	return nil
 }

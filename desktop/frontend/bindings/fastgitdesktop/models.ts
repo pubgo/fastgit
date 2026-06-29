@@ -34,7 +34,5 @@ export interface ModuleAction {
     "id": string;
     "title": string;
     "description": string;
-    "tool": string;
-    "args": string[] | null;
     "fields": ActionField[] | null;
 }
