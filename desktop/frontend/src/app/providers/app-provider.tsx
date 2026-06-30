@@ -5,7 +5,14 @@ import { BackendService } from "../../services/backend";
 import { filterModulesByMenu } from "../../lib/module-groups";
 import { loadPrefs, loadWorkspaceTabs, savePrefs, saveWorkspaceTabs } from "../../lib/persistence";
 import { AppContext } from "./app-context";
-import type { AppState, DesktopModule, ModuleAction, OperationOutput, SidebarMenuType } from "../types";
+import type {
+  AppState,
+  DesktopModule,
+  ModuleAction,
+  OperationOutput,
+  OutputListItem,
+  SidebarMenuType,
+} from "../types";
 
 interface AppProviderProps {
   children: ReactNode;
@@ -19,6 +26,205 @@ const initialOutput: OperationOutput = {
 };
 
 const backend = new BackendService();
+
+const githubRowPattern = /^#(\d+)\s+\[([^\]]+)\]\s+(.+)$/;
+const statusRowPattern = /^(.{2})\s+(.+)$/;
+
+function parseBranchItems(body: string): OutputListItem[] {
+  const lines = body.split(/\r?\n/).map((line) => line.trimEnd());
+  const items: OutputListItem[] = [];
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const active = trimmed.startsWith("* ");
+    const primary = active ? trimmed.slice(2).trim() : trimmed.replace(/^-+\s+/, "");
+    if (!primary) {
+      return;
+    }
+
+    items.push({
+      id: `${primary}-${index}`,
+      primary,
+      active,
+      badge: active ? "current" : undefined,
+    });
+  });
+
+  return items;
+}
+
+function parseTagItems(body: string): OutputListItem[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((tag, index) => ({
+      id: `${tag}-${index}`,
+      primary: tag,
+    }));
+}
+
+function parseIssueLikeItems(body: string): OutputListItem[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line, index) => {
+      const match = line.match(githubRowPattern);
+      if (!match) {
+        return [];
+      }
+      return [
+        {
+          id: `${match[1]}-${index}`,
+          primary: `#${match[1]} ${match[3]}`,
+          badge: match[2],
+        },
+      ];
+    });
+}
+
+function parsePrStatusItems(body: string): OutputListItem[] {
+  const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) {
+    return [];
+  }
+  const header = lines[0];
+  const match = header.match(/^#(\d+)\s+\[([^\]]+)\]$/);
+  if (!match) {
+    return [];
+  }
+
+  const title = lines[1] ?? `PR #${match[1]}`;
+  const url = lines.find((line) => /^https?:\/\//.test(line));
+
+  return [
+    {
+      id: `pr-${match[1]}`,
+      primary: `#${match[1]} ${title}`,
+      badge: match[2],
+      secondary: url,
+      url,
+    },
+  ];
+}
+
+function parseRepoStatusItems(body: string): OutputListItem[] {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .flatMap((line, index) => {
+      const match = line.match(statusRowPattern);
+      if (!match) {
+        return [];
+      }
+      const code = match[1].replace(/\s/g, "·");
+      return [
+        {
+          id: `repo-${index}`,
+          primary: match[2],
+          badge: code,
+        },
+      ];
+    });
+}
+
+function parseWorktreeItems(body: string, repoPath: string): OutputListItem[] {
+  const lines = body.split(/\r?\n/);
+  const items: OutputListItem[] = [];
+
+  let path = "";
+  let branch = "";
+  let head = "";
+
+  const push = () => {
+    if (!path) {
+      return;
+    }
+    const details = [branch, head ? head.slice(0, 8) : ""].filter(Boolean).join(" · ");
+    items.push({
+      id: `${path}-${items.length}`,
+      primary: path,
+      secondary: details || undefined,
+      active: path === repoPath,
+      badge: path === repoPath ? "current" : undefined,
+    });
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
+      return;
+    }
+    if (line.startsWith("worktree ")) {
+      push();
+      path = line.slice("worktree ".length).trim();
+      branch = "";
+      head = "";
+      return;
+    }
+    if (line.startsWith("branch ")) {
+      const ref = line.slice("branch ".length).trim();
+      branch = ref.replace("refs/heads/", "");
+      return;
+    }
+    if (line.startsWith("HEAD ")) {
+      head = line.slice("HEAD ".length).trim();
+    }
+  });
+
+  push();
+  return items;
+}
+
+function toStructuredOutput(actionID: string, body: string, repoPath: string): Pick<OperationOutput, "items" | "emptyHint"> {
+  const normalized = body.trim();
+  switch (actionID) {
+    case "branch_list": {
+      const items = parseBranchItems(normalized);
+      return { items, emptyHint: items.length === 0 ? "暂无分支" : undefined };
+    }
+    case "tag_list": {
+      const items = parseTagItems(normalized);
+      return { items, emptyHint: normalized === "no tags" ? "暂无标签" : items.length === 0 ? "暂无标签" : undefined };
+    }
+    case "worktree_list": {
+      const items = parseWorktreeItems(normalized, repoPath);
+      return {
+        items,
+        emptyHint: normalized === "no worktree" ? "暂无 worktree" : items.length === 0 ? "暂无 worktree" : undefined,
+      };
+    }
+    case "issue_list": {
+      const items = parseIssueLikeItems(normalized);
+      return {
+        items,
+        emptyHint: normalized === "no open issues" ? "暂无 open issues" : items.length === 0 ? "暂无 open issues" : undefined,
+      };
+    }
+    case "pr_status": {
+      const items = parsePrStatusItems(normalized);
+      return {
+        items,
+        emptyHint: normalized === "no open PR for current branch" ? "当前分支暂无 open PR" : undefined,
+      };
+    }
+    case "repo_status": {
+      const items = parseRepoStatusItems(normalized);
+      return {
+        items,
+        emptyHint: normalized === "working tree clean" ? "工作区干净" : undefined,
+      };
+    }
+    default:
+      return {};
+  }
+}
 
 function normalizeRepoPath(path: string): string {
   return path.trim();
@@ -375,6 +581,7 @@ export function AppProvider({ children }: AppProviderProps) {
           actionID: action.id,
           values,
         });
+        const structured = result.exitCode === 0 ? toStructuredOutput(action.id, result.output || "", state.repoPath) : {};
         setState((prev) => ({
           ...prev,
           output: {
@@ -382,6 +589,8 @@ export function AppProvider({ children }: AppProviderProps) {
             command: result.command,
             exitCode: result.exitCode,
             body: result.output || "(no output)",
+            items: structured.items,
+            emptyHint: structured.emptyHint,
           },
         }));
       } catch (error) {

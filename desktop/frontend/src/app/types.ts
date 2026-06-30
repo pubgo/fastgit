@@ -9,11 +9,22 @@ export type { ActionRunRequest, CommandResult, DesktopModule, ModuleAction };
 
 export type SidebarMenuType = "source" | "collaboration" | "release" | "all";
 
+export interface OutputListItem {
+  id: string;
+  primary: string;
+  secondary?: string;
+  badge?: string;
+  active?: boolean;
+  url?: string;
+}
+
 export interface OperationOutput {
   title: string;
   command: string;
   exitCode: number;
   body: string;
+  items?: OutputListItem[];
+  emptyHint?: string;
 }
 
 export interface AppState {
