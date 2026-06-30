@@ -6,7 +6,6 @@ import { ModuleSidebar } from "../features/modules/module-sidebar";
 import { SidebarMenu } from "../features/modules/sidebar-menu";
 import { ModuleActions } from "../features/modules/module-actions";
 import { OutputPanel } from "../features/output/output-panel";
-import { RepoSwitcher } from "../features/workspace/repo-switcher";
 import { TopTabs } from "../features/workspace/top-tabs";
 
 export function DesktopLayout() {
@@ -70,7 +69,6 @@ export function DesktopLayout() {
           />
         </div>
         <div className="desktop-main">
-          <RepoSwitcher />
           <ModuleActions />
           <OutputPanel />
         </div>

@@ -6,6 +6,8 @@ export interface DesktopPrefs {
   selectedMenu: SidebarMenuType;
   modulePaneWidth: number;
   modulePaneCollapsed: boolean;
+  repoNamespaces: string[];
+  selectedRepoPath: string;
 }
 
 interface WorkspaceTabs {
@@ -28,7 +30,21 @@ export function loadPrefs(): Partial<DesktopPrefs> {
       return {};
     }
     const parsed = JSON.parse(raw) as Partial<DesktopPrefs>;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    const repoNamespaces = Array.isArray(parsed.repoNamespaces)
+      ? parsed.repoNamespaces.map((value) => String(value).trim()).filter(Boolean)
+      : undefined;
+    const selectedRepoPath =
+      typeof parsed.selectedRepoPath === "string" ? parsed.selectedRepoPath.trim() : undefined;
+
+    return {
+      ...parsed,
+      repoNamespaces,
+      selectedRepoPath,
+    };
   } catch {
     return {};
   }

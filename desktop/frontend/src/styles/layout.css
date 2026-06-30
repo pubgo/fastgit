@@ -99,7 +99,6 @@
 }
 
 .tabs-add {
-  margin-left: auto;
   width: 26px;
   height: 26px;
   border: 1px solid var(--line);
@@ -110,6 +109,45 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.tabs-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tabs-project-select {
+  min-width: 220px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.tabs-settings {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-topbar-active);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.tabs-settings-panel {
+  position: fixed;
+  z-index: 40;
+  right: 12px;
+  top: 46px;
+  width: min(620px, calc(100vw - 24px));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-menu);
+  padding: 10px;
 }
 
 .tabs-menu {
@@ -340,12 +378,11 @@
 .desktop-main {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 1fr auto;
   gap: 10px;
   padding: 10px;
 }
 
-.workspace-panel,
 .module-actions,
 .output-panel {
   border: 1px solid var(--line);
@@ -355,30 +392,139 @@
   padding: 12px;
 }
 
-.workspace-panel header {
+.workspace-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-panel__row--add .ui-input {
+  flex: 1;
+}
+
+.repo-settings {
+  display: grid;
+  gap: 8px;
+}
+
+.repo-settings__header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 8px;
 }
 
-.workspace-panel h2 {
+.repo-settings__header h3 {
+  margin: 0;
   font-size: 14px;
 }
 
-.workspace-panel header p,
-.workspace-panel__status {
+.repo-settings__header p,
+.repo-settings__status,
+.repo-settings__count {
+  margin: 0;
   color: var(--text-2);
   font-size: 12px;
 }
 
-.workspace-panel__row {
-  display: flex;
+.repo-settings__current {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-topbar-active);
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.repo-settings__current span {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.repo-settings__current strong {
+  font-size: 12px;
+  color: var(--text-1);
+  word-break: break-all;
+}
+
+.repo-list {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+  display: grid;
   gap: 8px;
 }
 
-.workspace-panel__status {
-  margin-top: 8px;
+.repo-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-card-soft);
+  padding: 8px;
+  display: grid;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.repo-item--selected {
+  box-shadow: inset 0 0 0 1px var(--brand-line);
+}
+
+.repo-item--current {
+  background: var(--bg-topbar-active);
+  border-color: var(--line-strong);
+}
+
+.repo-item__meta {
+  min-width: 0;
+}
+
+.repo-item__meta strong {
+  display: block;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.repo-item__meta span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-2);
+  word-break: break-all;
+}
+
+.repo-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.repo-item__actions .ui-button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.repo-badge {
+  font-size: 11px;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--bg-pane);
+}
+
+.repo-badge--active {
+  color: var(--brand-strong);
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.repo-list__empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 12px;
 }
 
 @media (max-width: 1120px) {
@@ -441,11 +587,28 @@
   }
 
   .desktop-main {
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
+  }
+
+  .tabs-project-select {
+    min-width: 0;
+    width: 140px;
+  }
+
+  .tabs-settings-panel {
+    top: 84px;
   }
 }
 
 @media (max-width: 640px) {
+  .tabs-actions {
+    gap: 4px;
+  }
+
+  .tabs-project-select {
+    width: 110px;
+  }
+
   .workspace-panel__row {
     flex-direction: column;
   }

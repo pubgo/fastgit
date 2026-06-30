@@ -22,6 +22,13 @@
   background: var(--bg-pane-hover);
 }
 
+.ui-button:disabled {
+  cursor: not-allowed;
+  color: var(--text-3);
+  border-color: var(--line);
+  background: var(--bg-pane);
+}
+
 .ui-button--primary {
   border-color: transparent;
   color: var(--text-inverse);
@@ -31,6 +38,12 @@
 .ui-button--primary:hover {
   background: var(--brand-strong);
   border-color: transparent;
+}
+
+.ui-button--primary:disabled {
+  color: var(--text-inverse);
+  border-color: transparent;
+  background: var(--line-strong);
 }
 
 .ui-button--ghost {

@@ -18,6 +18,7 @@ export interface OperationOutput {
 
 export interface AppState {
   repoPath: string;
+  repoNamespaces: string[];
   repoStatus: string;
   modules: DesktopModule[];
   selectedModuleId: string | null;

@@ -1,13 +1,51 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Settings2, X } from "lucide-react";
 
 import { useAppContext } from "../../app/providers/app-context";
 import logoIcon from "../../assets/brand/fastgit-logo-icon.svg";
+import { RepoSwitcher } from "./repo-switcher";
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? "workspace";
+}
+
+function pathSegments(path: string): string[] {
+  return path.split(/[\\/]/).filter(Boolean);
+}
+
+function buildProjectLabels(paths: string[]): Map<string, string> {
+  const labels = new Map<string, string>();
+
+  for (const path of paths) {
+    const segments = pathSegments(path);
+    if (segments.length === 0) {
+      labels.set(path, path);
+      continue;
+    }
+
+    let label = segments[segments.length - 1];
+    for (let depth = 1; depth <= segments.length; depth += 1) {
+      const candidate = segments.slice(-depth).join("/");
+      const duplicated = paths.some((otherPath) => {
+        if (otherPath === path) {
+          return false;
+        }
+        const otherSegments = pathSegments(otherPath);
+        return otherSegments.slice(-depth).join("/") === candidate;
+      });
+      if (!duplicated) {
+        label = candidate;
+        break;
+      }
+      label = candidate;
+    }
+
+    labels.set(path, label);
+  }
+
+  return labels;
 }
 
 export function TopTabs() {
@@ -19,11 +57,16 @@ export function TopTabs() {
     closeTabsToRight,
     reorderModuleTabs,
     setSelectedModule,
+    switchRepo,
   } = useAppContext();
-  const repoName = basename(state.repoPath);
+  const projectLabels = useMemo(() => buildProjectLabels(state.repoNamespaces), [state.repoNamespaces]);
+  const repoName = state.repoPath ? projectLabels.get(state.repoPath) ?? basename(state.repoPath) : "workspace";
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; moduleId: string } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsPanelRef = useRef<HTMLDivElement | null>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const openedModules = state.openedModuleIds
     .map((id) => state.modules.find((module) => module.id === id))
     .filter((module): module is NonNullable<typeof module> => module !== undefined);
@@ -40,10 +83,24 @@ export function TopTabs() {
   const hasRight = menuIndex >= 0 && menuIndex < openedCount - 1;
 
   useEffect(() => {
-    const onPointerDown = () => setMenu(null);
+    const onPointerDown = (event: PointerEvent) => {
+      setMenu(null);
+      if (!settingsOpen) {
+        return;
+      }
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      if (settingsButtonRef.current?.contains(target) || settingsPanelRef.current?.contains(target)) {
+        return;
+      }
+      setSettingsOpen(false);
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenu(null);
+        setSettingsOpen(false);
       }
     };
     window.addEventListener("pointerdown", onPointerDown);
@@ -52,7 +109,7 @@ export function TopTabs() {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [settingsOpen]);
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>, moduleId: string) => {
     setDraggedId(moduleId);
@@ -151,9 +208,45 @@ export function TopTabs() {
         })}
       </div>
 
-      <button className="tabs-add app-no-drag-region" onClick={addModuleTab} type="button" aria-label="new tab">
-        <Plus size={14} />
-      </button>
+      <div className="tabs-actions app-no-drag-region">
+        <select
+          className="ui-input tabs-project-select"
+          value={state.repoPath}
+          title={state.repoPath || "未选择项目"}
+          onChange={(event) => void switchRepo(event.target.value)}
+        >
+          <option value="">{state.repoNamespaces.length === 0 ? "未配置项目" : "选择项目"}</option>
+          {state.repoNamespaces.map((repoPath) => (
+            <option key={repoPath} value={repoPath}>
+              {projectLabels.get(repoPath) ?? basename(repoPath)}
+            </option>
+          ))}
+        </select>
+
+        <button
+          ref={settingsButtonRef}
+          className="tabs-settings"
+          onClick={() => setSettingsOpen((value) => !value)}
+          type="button"
+          aria-label="open project settings"
+        >
+          <Settings2 size={14} />
+        </button>
+
+        <button className="tabs-add" onClick={addModuleTab} type="button" aria-label="new tab">
+          <Plus size={14} />
+        </button>
+      </div>
+
+      {settingsOpen && (
+        <div
+          ref={settingsPanelRef}
+          className="tabs-settings-panel app-no-drag-region"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <RepoSwitcher />
+        </div>
+      )}
 
       {menu && menuModule && (
         <div

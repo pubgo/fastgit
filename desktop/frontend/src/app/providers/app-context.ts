@@ -15,8 +15,10 @@ export interface AppContextValue {
   setSelectedMenu(menu: SidebarMenuType): void;
   setModulePaneWidth(width: number): void;
   setModulePaneCollapsed(collapsed: boolean): void;
-  refresh(): Promise<void>;
+  refresh(preferredRepoPath?: string): Promise<void>;
+  addRepo(path: string): Promise<void>;
   switchRepo(path: string): Promise<void>;
+  removeRepo(path: string): Promise<void>;
   runAction(module: DesktopModule, action: ModuleAction, values: ActionRunRequest["values"]): Promise<void>;
 }
 

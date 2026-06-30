@@ -20,6 +20,37 @@ const initialOutput: OperationOutput = {
 
 const backend = new BackendService();
 
+function normalizeRepoPath(path: string): string {
+  return path.trim();
+}
+
+function mergeRepoNamespaces(existing: string[], ...paths: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  const append = (value: string) => {
+    const normalized = normalizeRepoPath(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  };
+
+  existing.forEach(append);
+  paths.forEach(append);
+
+  return result;
+}
+
+function prioritizeRepo(existing: string[], path: string): string[] {
+  const target = normalizeRepoPath(path);
+  if (!target) {
+    return existing;
+  }
+  return [target, ...existing.filter((item) => normalizeRepoPath(item) !== target)];
+}
+
 function upsertOpened(opened: string[], moduleId: string | null): string[] {
   if (!moduleId) {
     return opened;
@@ -39,8 +70,15 @@ function fallbackSelection(modules: DesktopModule[], selectedMenu: SidebarMenuTy
 
 function createInitialState(): AppState {
   const prefs = loadPrefs();
+  const selectedRepoPath = normalizeRepoPath(prefs.selectedRepoPath ?? "");
+  const repoNamespaces = prioritizeRepo(
+    mergeRepoNamespaces(prefs.repoNamespaces ?? [], selectedRepoPath),
+    selectedRepoPath
+  );
+
   return {
-    repoPath: "",
+    repoPath: selectedRepoPath,
+    repoNamespaces,
     repoStatus: "加载中...",
     modules: [],
     selectedModuleId: null,
@@ -60,46 +98,58 @@ export function AppProvider({ children }: AppProviderProps) {
     setState((prev) => ({ ...prev, busy }));
   }, []);
 
-  const refresh = useCallback(async () => {
-    setBusy(true);
-    try {
-      const [repoPath, modules] = await Promise.all([backend.getRepoRoot(), backend.getModules()]);
-      setState((prev) => {
-        const storedTabs = loadWorkspaceTabs(repoPath);
-        const filtered = filterModulesByMenu(modules, prev.selectedMenu);
-        const selectedCandidate = storedTabs?.selectedModuleId ?? prev.selectedModuleId;
-        const nextSelected =
-          selectedCandidate && filtered.some((module) => module.id === selectedCandidate)
-            ? selectedCandidate
-            : filtered[0]?.id ?? modules[0]?.id ?? null;
-        const availableIDs = new Set(modules.map((module) => module.id));
-        const openedCandidate = storedTabs?.openedModuleIds ?? prev.openedModuleIds;
-        const nextOpened = openedCandidate.filter((id) => availableIDs.has(id));
+  const refresh = useCallback(
+    async (preferredRepoPath?: string) => {
+      const preferred = normalizeRepoPath(preferredRepoPath ?? "");
+      setBusy(true);
+      try {
+        if (preferred) {
+          await backend.setRepoRoot(preferred);
+        }
 
-        return {
+        const [repoPathRaw, modules] = await Promise.all([backend.getRepoRoot(), backend.getModules()]);
+        const repoPath = normalizeRepoPath(repoPathRaw);
+
+        setState((prev) => {
+          const storedTabs = loadWorkspaceTabs(repoPath);
+          const filtered = filterModulesByMenu(modules, prev.selectedMenu);
+          const selectedCandidate = storedTabs?.selectedModuleId ?? prev.selectedModuleId;
+          const nextSelected =
+            selectedCandidate && filtered.some((module) => module.id === selectedCandidate)
+              ? selectedCandidate
+              : filtered[0]?.id ?? modules[0]?.id ?? null;
+          const availableIDs = new Set(modules.map((module) => module.id));
+          const openedCandidate = storedTabs?.openedModuleIds ?? prev.openedModuleIds;
+          const nextOpened = openedCandidate.filter((id) => availableIDs.has(id));
+
+          return {
+            ...prev,
+            repoPath,
+            repoNamespaces: prioritizeRepo(mergeRepoNamespaces(prev.repoNamespaces, preferred, repoPath), repoPath),
+            repoStatus: repoPath ? `当前项目: ${repoPath}` : "请先选择项目命名空间",
+            modules,
+            selectedModuleId: nextSelected,
+            openedModuleIds: upsertOpened(nextOpened, nextSelected),
+          };
+        });
+      } catch (error) {
+        const message = String(error);
+        setState((prev) => ({
           ...prev,
-          repoPath,
-          repoStatus: `当前仓库: ${repoPath}`,
-          modules,
-          selectedModuleId: nextSelected,
-          openedModuleIds: upsertOpened(nextOpened, nextSelected),
-        };
-      });
-    } catch (error) {
-      setState((prev) => ({
-        ...prev,
-        output: {
-          title: "Load Error",
-          command: "bootstrap",
-          exitCode: 1,
-          body: String(error),
-        },
-        repoStatus: `加载失败: ${String(error)}`,
-      }));
-    } finally {
-      setBusy(false);
-    }
-  }, [setBusy]);
+          output: {
+            title: preferred ? "Set Project" : "Load Error",
+            command: preferred ? "SetProjectRoot" : "bootstrap",
+            exitCode: 1,
+            body: message,
+          },
+          repoStatus: preferred ? `项目切换失败: ${message}` : `加载失败: ${message}`,
+        }));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [setBusy]
+  );
 
   const setSelectedModule = useCallback((moduleId: string) => {
     setState((prev) => ({
@@ -240,35 +290,84 @@ export function AppProvider({ children }: AppProviderProps) {
 
   const switchRepo = useCallback(
     async (path: string) => {
-      const next = path.trim();
-      if (!next) {
+      const next = normalizeRepoPath(path);
+      if (!next || next === state.repoPath) {
         return;
       }
 
-      setBusy(true);
-      try {
-        await backend.setRepoRoot(next);
-        await refresh();
-      } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        repoNamespaces: prioritizeRepo(mergeRepoNamespaces(prev.repoNamespaces, next), next),
+      }));
+      await refresh(next);
+    },
+    [refresh, state.repoPath]
+  );
+
+  const addRepo = useCallback(async (path: string) => {
+    const next = normalizeRepoPath(path);
+    if (!next) {
+      return;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      repoNamespaces: mergeRepoNamespaces(prev.repoNamespaces, next),
+      repoStatus:
+        next === prev.repoPath
+          ? `当前项目: ${prev.repoPath}`
+          : `已添加项目命名空间: ${next}`,
+    }));
+  }, []);
+
+  const removeRepo = useCallback(
+    async (path: string) => {
+      const target = normalizeRepoPath(path);
+      if (!target) {
+        return;
+      }
+
+      const nextNamespaces = state.repoNamespaces.filter((repoPath) => repoPath !== target);
+      if (nextNamespaces.length === state.repoNamespaces.length) {
+        return;
+      }
+
+      if (state.repoPath === target) {
+        if (nextNamespaces.length === 0) {
+          return;
+        }
+
         setState((prev) => ({
           ...prev,
-          repoStatus: `切换失败: ${String(error)}`,
-          output: {
-            title: "Set Repository",
-            command: "SetRepoRoot",
-            exitCode: 1,
-            body: String(error),
-          },
+          repoNamespaces: nextNamespaces,
         }));
-      } finally {
-        setBusy(false);
+        await refresh(nextNamespaces[0]);
+        return;
       }
+
+      setState((prev) => ({
+        ...prev,
+        repoNamespaces: nextNamespaces,
+      }));
     },
-    [refresh, setBusy]
+    [refresh, state.repoNamespaces, state.repoPath]
   );
 
   const runAction = useCallback(
     async (module: DesktopModule, action: ModuleAction, values: Record<string, string>) => {
+      if (!state.repoPath) {
+        setState((prev) => ({
+          ...prev,
+          output: {
+            title: `${module.title} / ${action.title}`,
+            command: "RunAction",
+            exitCode: 1,
+            body: "请先选择项目命名空间。",
+          },
+        }));
+        return;
+      }
+
       setBusy(true);
       try {
         const result = await backend.runAction({
@@ -299,7 +398,7 @@ export function AppProvider({ children }: AppProviderProps) {
         setBusy(false);
       }
     },
-    [setBusy]
+    [setBusy, state.repoPath]
   );
 
   const selectedModule = useMemo(() => {
@@ -319,8 +418,10 @@ export function AppProvider({ children }: AppProviderProps) {
       selectedMenu: state.selectedMenu,
       modulePaneWidth: state.modulePaneWidth,
       modulePaneCollapsed: state.modulePaneCollapsed,
+      repoNamespaces: state.repoNamespaces,
+      selectedRepoPath: state.repoPath,
     });
-  }, [state.modulePaneCollapsed, state.modulePaneWidth, state.selectedMenu]);
+  }, [state.modulePaneCollapsed, state.modulePaneWidth, state.repoNamespaces, state.repoPath, state.selectedMenu]);
 
   useEffect(() => {
     if (!state.repoPath) {
@@ -353,7 +454,9 @@ export function AppProvider({ children }: AppProviderProps) {
       setModulePaneWidth,
       setModulePaneCollapsed,
       refresh,
+      addRepo,
       switchRepo,
+      removeRepo,
       runAction,
     }),
     [
@@ -370,7 +473,9 @@ export function AppProvider({ children }: AppProviderProps) {
       setModulePaneWidth,
       setModulePaneCollapsed,
       refresh,
+      addRepo,
       switchRepo,
+      removeRepo,
       runAction,
     ]
   );
