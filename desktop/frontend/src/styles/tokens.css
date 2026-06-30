@@ -2,42 +2,47 @@
   --font-heading: "Sora", "Avenir Next", sans-serif;
   --font-body: "Manrope", "PingFang SC", "Segoe UI", sans-serif;
 
-  --bg-app: #e0e5ed;
-  --bg-main: #edf1f6;
+  --bg-app: #e1e7ef;
+  --bg-main: #edf2f8;
   --bg-topbar: #e3e8f0;
-  --bg-topbar-active: #f0f3f8;
-  --bg-sidebar: #dde3ec;
-  --bg-sidebar-soft: #e5eaf2;
+  --bg-topbar-active: #f1f4f9;
   --bg-pane: #e3e7ef;
-  --bg-pane-hover: #dbe2ec;
+  --bg-pane-hover: #dce3ed;
   --bg-card: #eef2f7;
-  --bg-card-soft: #dde3ed;
+  --bg-card-soft: #dfe5ee;
   --bg-input: #edf1f6;
+  --bg-output: #e7edf6;
 
   --text-1: #1f2d44;
-  --text-2: #5f708b;
+  --text-2: #5d708d;
   --text-3: #8b9ab0;
-  --text-on-dark: #5f708b;
-  --sidebar-icon: #667b99;
-  --sidebar-icon-hover: #1f2d44;
-  --sidebar-footer: #7388a6;
-  --sidebar-active-bg: rgba(79, 127, 196, 0.16);
-  --sidebar-active-border: rgba(147, 175, 220, 0.52);
+  --text-inverse: #ffffff;
+  --text-output: #1f2d44;
 
   --line: #bfcbdb;
   --line-strong: #adbbd1;
-  --line-dark: #b8c4d6;
+  --line-output: #b5c4d8;
 
   --brand: #4f7fc4;
   --brand-strong: #3c679f;
   --accent: #13ad9f;
+  --brand-soft: rgba(79, 127, 196, 0.12);
+  --brand-soft-strong: rgba(79, 127, 196, 0.18);
+  --brand-line: rgba(79, 127, 196, 0.52);
+  --brand-line-strong: rgba(79, 127, 196, 0.48);
 
   --ok: #1b9b4a;
   --error: #d83f57;
+  --ok-soft: rgba(27, 155, 74, 0.08);
+  --ok-line: rgba(27, 155, 74, 0.25);
+  --error-soft: rgba(216, 63, 87, 0.08);
+  --error-line: rgba(216, 63, 87, 0.25);
 
   --radius-xl: 14px;
   --radius-lg: 11px;
   --radius-md: 9px;
 
   --shadow-card: 0 8px 26px rgba(18, 28, 44, 0.08);
+  --shadow-menu: 0 8px 20px rgba(19, 31, 50, 0.18);
+  --highlight-stroke: rgba(255, 255, 255, 0.34);
 }

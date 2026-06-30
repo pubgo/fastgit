@@ -35,14 +35,14 @@
 
 .status-pill--ok {
   color: var(--ok);
-  background: rgba(27, 155, 74, 0.08);
-  border-color: rgba(27, 155, 74, 0.25);
+  background: var(--ok-soft);
+  border-color: var(--ok-line);
 }
 
 .status-pill--error {
   color: var(--error);
-  background: rgba(216, 63, 87, 0.08);
-  border-color: rgba(216, 63, 87, 0.25);
+  background: var(--error-soft);
+  border-color: var(--error-line);
 }
 
 .output-panel__body {
@@ -50,10 +50,10 @@
   min-height: 180px;
   max-height: 30vh;
   overflow: auto;
-  border: 1px solid #202d42;
+  border: 1px solid var(--line-output);
   border-radius: var(--radius-lg);
-  background: #0f1725;
-  color: #d4dff2;
+  background: var(--bg-output);
+  color: var(--text-output);
   padding: 11px;
   font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
   font-size: 12px;

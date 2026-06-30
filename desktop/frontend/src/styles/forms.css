@@ -24,7 +24,7 @@
 
 .ui-button--primary {
   border-color: transparent;
-  color: #fff;
+  color: var(--text-inverse);
   background: var(--brand);
 }
 
@@ -54,7 +54,7 @@
 .ui-input:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(79, 127, 196, 0.18);
+  box-shadow: 0 0 0 3px var(--brand-soft-strong);
 }
 
 .action-field {

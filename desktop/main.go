@@ -10,12 +10,16 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed assets/fastgit-icon.png
+var appIcon []byte
+
 func main() {
 	svc := NewFastgitService()
 
 	app := application.New(application.Options{
 		Name:        "fastgit-desktop",
 		Description: "Desktop client for fastgit",
+		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(svc),
 		},

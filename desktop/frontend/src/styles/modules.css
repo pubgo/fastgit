@@ -37,7 +37,7 @@
   padding: 12px;
   display: grid;
   gap: 10px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.32);
+  box-shadow: 0 1px 0 var(--highlight-stroke);
   animation: rise-in 0.24s ease both;
 }
 

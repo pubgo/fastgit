@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
-import { FolderGit2, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { useAppContext } from "../../app/providers/app-context";
+import logoIcon from "../../assets/brand/fastgit-logo-icon.svg";
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -94,7 +95,7 @@ export function TopTabs() {
   return (
     <header className="tabs-header app-drag-region">
       <div className="tabs-repo app-no-drag-region">
-        <FolderGit2 size={14} />
+        <img className="tabs-repo__logo" src={logoIcon} alt="fastgit logo" />
         <span>{repoName}</span>
       </div>
 
