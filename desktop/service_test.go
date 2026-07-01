@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
 
 func TestParseGitHubRemote(t *testing.T) {
 	cases := []struct {
@@ -32,5 +37,45 @@ func TestDetermineWorktreeNames(t *testing.T) {
 	b, d = determineWorktreeNames("feature/a")
 	if b != "feature/a" || d != "feature-a" {
 		t.Fatalf("unexpected branch mapping: %s %s", b, d)
+	}
+}
+
+func TestNormalizeSSHPaths(t *testing.T) {
+	got := normalizeSSHPaths([]string{
+		"~/.ssh/id_ed25519 ~/.ssh/id_rsa",
+		"'/tmp/custom key'",
+		"\"~/quoted\"",
+	}, "/Users/tester")
+
+	want := []string{
+		"/Users/tester/.ssh/id_ed25519",
+		"/Users/tester/.ssh/id_rsa",
+		"/tmp/custom key",
+		"/Users/tester/quoted",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalizeSSHPaths mismatch:\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestExistingFilesIgnoresMissingEntries(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "known_hosts")
+	if err := os.WriteFile(present, []byte("github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := existingFiles([]string{
+		filepath.Join(dir, "missing_known_hosts2"),
+		present,
+	})
+	if err != nil {
+		t.Fatalf("existingFiles returned error: %v", err)
+	}
+
+	want := []string{present}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("existingFiles mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
 }

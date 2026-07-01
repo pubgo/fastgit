@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	neturl "net/url"
 	"os"
 	"os/exec"
@@ -16,8 +17,13 @@ import (
 	gitconfig "github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/client"
+	transport "github.com/go-git/go-git/v6/plumbing/transport"
 	httptransport "github.com/go-git/go-git/v6/plumbing/transport/http"
+	gitssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
+	gitsshknownhosts "github.com/go-git/go-git/v6/plumbing/transport/ssh/knownhosts"
 	"github.com/google/go-github/v71/github"
+	"github.com/kevinburke/ssh_config"
+	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/oauth2"
 )
 
@@ -66,6 +72,13 @@ type ActionRunRequest struct {
 type FastgitService struct {
 	repoRoot    string
 	githubToken string
+}
+
+type desktopSSHAuth struct {
+	user            string
+	methods         []gossh.AuthMethod
+	hostAlias       string
+	knownHostsFiles []string
 }
 
 func NewFastgitService() *FastgitService {
@@ -487,11 +500,24 @@ func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if isSSHRemoteRepo(repo) {
+		out, err := s.gitInRepo(ctx, "pull", "origin", branch)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(out) == "" {
+			return "pull completed", nil
+		}
+		return strings.TrimSpace(out), nil
+	}
 	opts := &git.PullOptions{
 		RemoteName:    "origin",
 		ReferenceName: plumbing.NewBranchReferenceName(branch),
 		SingleBranch:  true,
-		ClientOptions: s.clientOptions(repo),
+	}
+	opts.ClientOptions, err = s.clientOptions(repo)
+	if err != nil {
+		return "", err
 	}
 	if err := wt.PullContext(ctx, opts); err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
@@ -507,7 +533,21 @@ func (s *FastgitService) repoPush(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	err = repo.PushContext(ctx, &git.PushOptions{RemoteName: "origin", ClientOptions: s.clientOptions(repo)})
+	if isSSHRemoteRepo(repo) {
+		out, err := s.gitInRepo(ctx, "push", "origin", "HEAD")
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(out) == "" {
+			return "push completed", nil
+		}
+		return strings.TrimSpace(out), nil
+	}
+	clientOptions, err := s.clientOptions(repo)
+	if err != nil {
+		return "", err
+	}
+	err = repo.PushContext(ctx, &git.PushOptions{RemoteName: "origin", ClientOptions: clientOptions})
 	if err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return "already up-to-date", nil
@@ -901,11 +941,25 @@ func (s *FastgitService) tagPush(ctx context.Context, name string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	if isSSHRemoteRepo(repo) {
+		out, err := s.gitInRepo(ctx, "push", "origin", fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(out) == "" {
+			return fmt.Sprintf("tag pushed: %s", name), nil
+		}
+		return strings.TrimSpace(out), nil
+	}
 	refSpec := gitconfig.RefSpec(fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
+	clientOptions, err := s.clientOptions(repo)
+	if err != nil {
+		return "", err
+	}
 	err = repo.PushContext(ctx, &git.PushOptions{
 		RemoteName:    "origin",
 		RefSpecs:      []gitconfig.RefSpec{refSpec},
-		ClientOptions: s.clientOptions(repo),
+		ClientOptions: clientOptions,
 	})
 	if err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
@@ -996,20 +1050,314 @@ func parseGitHubRemote(remote string) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func (s *FastgitService) clientOptions(repo *git.Repository) []client.Option {
-	token, _ := s.githubTokenValue()
-	if token == "" {
-		return nil
+func isSSHRemoteRepo(repo *git.Repository) bool {
+	if repo == nil {
+		return false
 	}
 	remote, err := repo.Remote("origin")
 	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
+		return false
+	}
+	parsedURL, err := transport.ParseURL(strings.TrimSpace(remote.Config().URLs[0]))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsedURL.Scheme, "ssh")
+}
+
+func (s *FastgitService) clientOptions(repo *git.Repository) ([]client.Option, error) {
+	remote, err := repo.Remote("origin")
+	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
+		return nil, nil
+	}
+	rawURL := strings.TrimSpace(remote.Config().URLs[0])
+	parsedURL, err := transport.ParseURL(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse remote URL failed: %w", err)
+	}
+
+	switch strings.ToLower(parsedURL.Scheme) {
+	case "http", "https":
+		token, _ := s.githubTokenValue()
+		if token == "" {
+			return nil, nil
+		}
+		return []client.Option{client.WithHTTPAuth(&httptransport.TokenAuth{Token: token})}, nil
+	case "ssh":
+		auth, err := buildSSHAuth(parsedURL)
+		if err != nil {
+			return nil, err
+		}
+		return []client.Option{client.WithSSHAuth(auth)}, nil
+	default:
+		return nil, nil
+	}
+}
+
+func buildSSHAuth(remoteURL *neturl.URL) (client.SSHAuth, error) {
+	if remoteURL == nil {
+		return nil, errors.New("ssh remote URL is nil")
+	}
+
+	hostAlias := remoteURL.Hostname()
+	user := "git"
+	if remoteURL.User != nil && remoteURL.User.Username() != "" {
+		user = remoteURL.User.Username()
+	} else if configuredUser := strings.TrimSpace(ssh_config.Get(hostAlias, "User")); configuredUser != "" {
+		user = configuredUser
+	}
+
+	identitiesOnly := strings.EqualFold(strings.TrimSpace(ssh_config.Get(hostAlias, "IdentitiesOnly")), "yes")
+	identityFiles := normalizeSSHConfigPaths(hostAlias, "IdentityFile")
+	knownHostsFiles := append(
+		normalizeSSHConfigPaths(hostAlias, "UserKnownHostsFile"),
+		normalizeSSHConfigPaths(hostAlias, "GlobalKnownHostsFile")...,
+	)
+	knownHostsFiles = uniqueStrings(knownHostsFiles)
+
+	methods, keyErrs := loadSSHKeyAuthMethods(user, identityFiles)
+
+	var agentErr error
+	if !identitiesOnly {
+		agentAuth, err := gitssh.NewSSHAgentAuth(user)
+		if err == nil {
+			methods = append(methods, gossh.PublicKeysCallback(agentAuth.Callback))
+		} else {
+			agentErr = err
+		}
+	}
+
+	if len(methods) == 0 {
+		var reasons []string
+		if len(keyErrs) > 0 {
+			reasons = append(reasons, "key files: "+strings.Join(keyErrs, "; "))
+		}
+		if agentErr != nil {
+			reasons = append(reasons, "ssh-agent: "+agentErr.Error())
+		}
+		if len(reasons) == 0 {
+			reasons = append(reasons, "no usable SSH key or ssh-agent identity found")
+		}
+		return nil, fmt.Errorf("ssh auth unavailable for %s: %s", hostAlias, strings.Join(reasons, " | "))
+	}
+
+	return &desktopSSHAuth{
+		user:            user,
+		methods:         methods,
+		hostAlias:       hostAlias,
+		knownHostsFiles: knownHostsFiles,
+	}, nil
+}
+
+func (a *desktopSSHAuth) ClientConfig(_ context.Context, req *transport.Request) (*gossh.ClientConfig, error) {
+	cfg := &gossh.ClientConfig{
+		User: a.user,
+		Auth: a.methods,
+	}
+	if len(a.knownHostsFiles) == 0 {
+		return cfg, nil
+	}
+
+	usableKnownHostsFiles, err := existingFiles(a.knownHostsFiles)
+	if err != nil {
+		return nil, fmt.Errorf("inspect known_hosts failed: %w", err)
+	}
+	if len(usableKnownHostsFiles) == 0 {
+		return cfg, nil
+	}
+
+	knownHostsDB, err := gitsshknownhosts.NewDB(usableKnownHostsFiles...)
+	if err != nil {
+		return nil, fmt.Errorf("load known_hosts failed: %w", err)
+	}
+	hostWithPort := a.resolveHostWithPort(req)
+	cfg.HostKeyCallback = knownHostsDB.HostKeyCallback()
+	cfg.HostKeyAlgorithms = knownHostsDB.HostKeyAlgorithms(hostWithPort)
+	return cfg, nil
+}
+
+func (a *desktopSSHAuth) resolveHostWithPort(req *transport.Request) string {
+	hostAlias := a.hostAlias
+	if hostAlias == "" && req != nil && req.URL != nil {
+		hostAlias = req.URL.Hostname()
+	}
+
+	host := strings.TrimSpace(ssh_config.Get(hostAlias, "Hostname"))
+	if host == "" && req != nil && req.URL != nil {
+		host = req.URL.Hostname()
+	}
+	if host == "" {
+		host = hostAlias
+	}
+
+	port := ""
+	if req != nil && req.URL != nil {
+		port = req.URL.Port()
+	}
+	if port == "" {
+		port = strings.TrimSpace(ssh_config.Get(hostAlias, "Port"))
+	}
+	if port == "" {
+		port = "22"
+	}
+
+	return net.JoinHostPort(host, port)
+}
+
+func loadSSHKeyAuthMethods(user string, identityFiles []string) ([]gossh.AuthMethod, []string) {
+	methods := make([]gossh.AuthMethod, 0, len(identityFiles))
+	errs := make([]string, 0)
+	for _, identityFile := range uniqueStrings(identityFiles) {
+		info, err := os.Stat(identityFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			errs = append(errs, fmt.Sprintf("%s: %v", identityFile, err))
+			continue
+		}
+		if info.IsDir() {
+			continue
+		}
+		auth, err := gitssh.NewPublicKeysFromFile(user, identityFile, "")
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", identityFile, err))
+			continue
+		}
+		signer, err := preferredSigner(auth.Signer)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", identityFile, err))
+			continue
+		}
+		methods = append(methods, gossh.PublicKeys(signer))
+	}
+	return methods, errs
+}
+
+func preferredSigner(signer gossh.Signer) (gossh.Signer, error) {
+	if signer == nil {
+		return nil, errors.New("ssh signer is nil")
+	}
+	if signer.PublicKey().Type() != gossh.KeyAlgoRSA {
+		return signer, nil
+	}
+
+	algorithmSigner, ok := signer.(gossh.AlgorithmSigner)
+	if !ok {
+		return signer, nil
+	}
+
+	return gossh.NewSignerWithAlgorithms(algorithmSigner, []string{
+		gossh.KeyAlgoRSASHA512,
+		gossh.KeyAlgoRSASHA256,
+	})
+}
+
+func normalizeSSHConfigPaths(hostAlias, key string) []string {
+	values := ssh_config.GetAll(hostAlias, key)
+	if len(values) == 0 {
 		return nil
 	}
-	url := strings.ToLower(strings.TrimSpace(remote.Config().URLs[0]))
-	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
-		return []client.Option{client.WithHTTPAuth(&httptransport.TokenAuth{Token: token})}
+	home, _ := os.UserHomeDir()
+	return normalizeSSHPaths(values, home)
+}
+
+func normalizeSSHPaths(values []string, home string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, part := range splitSSHPathList(value) {
+			path := strings.TrimSpace(part)
+			if home != "" && strings.HasPrefix(path, "~/") {
+				path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+			}
+			if home != "" && path == "~" {
+				path = home
+			}
+			normalized = append(normalized, path)
+		}
 	}
-	return nil
+	return normalized
+}
+
+func splitSSHPathList(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+
+	parts := make([]string, 0, 1)
+	var current strings.Builder
+	var quote rune
+
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		parts = append(parts, current.String())
+		current.Reset()
+	}
+
+	for _, r := range value {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+				continue
+			}
+			current.WriteRune(r)
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ' ' || r == '\t':
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return parts
+}
+
+func uniqueStrings(values []string) []string {
+	if len(values) < 2 {
+		return values
+	}
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func existingFiles(paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+
+	files := make([]string, 0, len(paths))
+	for _, path := range uniqueStrings(paths) {
+		info, err := os.Stat(path)
+		if err == nil {
+			if !info.IsDir() {
+				files = append(files, path)
+			}
+			continue
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		return nil, err
+	}
+
+	return files, nil
 }
 
 func (s *FastgitService) githubTokenValue() (token string, source string) {
