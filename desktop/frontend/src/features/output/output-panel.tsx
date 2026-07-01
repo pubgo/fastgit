@@ -735,7 +735,7 @@ export function OutputPanel() {
             <div className="output-empty">请选择一条资源</div>
           )
         ) : (
-        <>
+        <div className="output-listview">
           <div className="output-toolbar">
             <input
               className="ui-input output-toolbar__search"
@@ -958,7 +958,7 @@ export function OutputPanel() {
           ) : (
             <div className="output-empty">没有匹配的结果</div>
           )}
-        </>
+        </div>
         )
       ) : state.output.detail ? (
         viewMode === "raw" ? (

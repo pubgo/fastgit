@@ -1,6 +1,8 @@
 .output-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-auto-rows: auto;
+  align-content: start;
   gap: 10px;
   min-height: 0;
 }
@@ -54,15 +56,16 @@
     radial-gradient(circle at top left, rgba(79, 127, 196, 0.12), transparent 44%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.08) 100%);
   padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
   gap: 12px;
 }
 
 .output-contextbar__meta {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .output-contextbar__meta strong {
@@ -74,19 +77,23 @@
 .output-contextbar__meta span {
   color: var(--text-2);
   font-size: 12px;
+  line-height: 1.45;
   word-break: break-word;
 }
 
 .output-contextbar__actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
+  min-width: 0;
+  align-self: start;
 }
 
 .output-viewtabs {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
   border: 1px solid var(--line-output);
@@ -126,9 +133,16 @@
 
 .output-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 140px auto;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) minmax(150px, 190px) auto;
   gap: 8px;
   align-items: center;
+}
+
+.output-listview {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
 }
 
 .output-toolbar__search {
@@ -176,6 +190,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) 320px;
   gap: 10px;
+  align-items: start;
 }
 
 .output-table {
@@ -508,6 +523,12 @@
   word-break: break-word;
 }
 
+@media (max-width: 1380px) {
+  .output-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) auto;
+  }
+}
+
 @media (max-width: 1180px) {
   .output-browser {
     grid-template-columns: minmax(0, 1fr);
@@ -519,11 +540,6 @@
 }
 
 @media (max-width: 900px) {
-  .output-contextbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .output-contextbar__actions {
     justify-content: flex-start;
   }
