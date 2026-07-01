@@ -251,6 +251,7 @@ function buildRowActions(actionId: string | undefined, item: OutputListItem): Ro
   switch (actionId) {
     case "branch_list":
       return [
+        { label: "对齐远端", actionId: "branch_force_sync", values: { name: item.value ?? item.primary } },
         { label: "切换", actionId: "branch_checkout", values: { name: item.value ?? item.primary }, disabled: item.active },
         { label: "删除", actionId: "branch_delete", values: { name: item.value ?? item.primary }, disabled: item.active },
       ];
@@ -278,6 +279,7 @@ function buildToolbarActions(actionId: string | undefined, item: OutputListItem 
         { label: "新建分支", actionId: "branch_create", values: {}, variant: "primary" },
         ...(item
           ? [
+              { label: "强制对齐远端", actionId: "branch_force_sync", values: { name: item.value ?? item.primary }, variant: "ghost" as const, tone: "danger" as const },
               { label: "切换分支", actionId: "branch_checkout", values: { name: item.value ?? item.primary }, disabled: item.active, variant: "ghost" as const },
               { label: "删除分支", actionId: "branch_delete", values: { name: item.value ?? item.primary }, disabled: item.active, variant: "ghost" as const, tone: "danger" as const },
             ]
@@ -385,7 +387,7 @@ function shouldOpenActionDialog(action: ModuleAction, values: Record<string, str
   if (fields.length === 0) {
     return false;
   }
-  if (action.id.startsWith("pr_")) {
+  if (action.id.startsWith("pr_") || action.id === "branch_force_sync") {
     return true;
   }
   return fields.some((field) => !values[field.key]);

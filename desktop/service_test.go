@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -78,4 +81,68 @@ func TestExistingFilesIgnoresMissingEntries(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("existingFiles mismatch:\n got: %#v\nwant: %#v", got, want)
 	}
+}
+
+func TestBranchForceSync(t *testing.T) {
+	root := t.TempDir()
+	remote := filepath.Join(root, "remote.git")
+	seed := filepath.Join(root, "seed")
+	local := filepath.Join(root, "local")
+
+	runGit(t, root, "init", "--bare", remote)
+	runGit(t, root, "clone", remote, seed)
+	runGit(t, seed, "config", "user.name", "Fastgit Test")
+	runGit(t, seed, "config", "user.email", "fastgit@example.com")
+	runGit(t, seed, "checkout", "-b", "main")
+	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("seed v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, seed, "add", "README.md")
+	runGit(t, seed, "commit", "-m", "seed v1")
+	runGit(t, seed, "push", "-u", "origin", "main")
+
+	runGit(t, root, "clone", "--branch", "main", remote, local)
+	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("seed v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, seed, "commit", "-am", "seed v2")
+	runGit(t, seed, "push", "origin", "main")
+
+	if err := os.WriteFile(filepath.Join(local, "README.md"), []byte("local dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "scratch.txt"), []byte("temp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &FastgitService{repoRoot: local}
+	out, err := svc.branchForceSync(context.Background(), "main")
+	if err != nil {
+		t.Fatalf("branchForceSync returned error: %v", err)
+	}
+	if !strings.Contains(out, "force aligned: main -> origin/main") {
+		t.Fatalf("unexpected output: %s", out)
+	}
+
+	readme, err := os.ReadFile(filepath.Join(local, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(readme) != "seed v2\n" {
+		t.Fatalf("README content mismatch: %q", string(readme))
+	}
+	if _, err := os.Stat(filepath.Join(local, "scratch.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected scratch.txt to be removed, got err=%v", err)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out))
 }

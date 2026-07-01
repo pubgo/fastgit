@@ -37,7 +37,7 @@ export function resolveActionFieldOptions(moduleID: string, actionID: string, fi
     ];
   }
 
-  if (moduleID === "branch" && fieldKey === "name" && (actionID === "branch_checkout" || actionID === "branch_delete")) {
+  if (moduleID === "branch" && fieldKey === "name" && (actionID === "branch_checkout" || actionID === "branch_delete" || actionID === "branch_force_sync")) {
     return toOptions(
       actionID === "branch_delete"
         ? catalog.branches.filter((item) => !item.active)

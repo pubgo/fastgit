@@ -184,12 +184,13 @@ func (s *FastgitService) GetModules() []DesktopModule {
 		{
 			ID:          "branch",
 			Title:       "分支管理",
-			Description: "列出 / 创建 / 切换 / 删除",
+			Description: "列出 / 创建 / 切换 / 删除 / 强制对齐",
 			Actions: []ModuleAction{
 				{ID: "branch_list", Title: "列出本地分支", Description: "显示本地分支列表"},
 				{ID: "branch_create", Title: "创建分支", Description: "创建新分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
 				{ID: "branch_checkout", Title: "切换分支", Description: "切换到指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
 				{ID: "branch_delete", Title: "删除分支", Description: "删除指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
+				{ID: "branch_force_sync", Title: "强制对齐远端", Description: "丢弃本地改动并强制对齐 origin/<branch>", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
 			},
 		},
 		{
@@ -317,6 +318,12 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 			return "", err
 		}
 		return s.branchDelete(ctx, name)
+	case "branch_force_sync":
+		name, err := requiredValue(values, "name", "分支名")
+		if err != nil {
+			return "", err
+		}
+		return s.branchForceSync(ctx, name)
 	case "worktree_list":
 		return s.worktreeList(ctx)
 	case "worktree_create":
@@ -645,6 +652,54 @@ func (s *FastgitService) branchDelete(ctx context.Context, name string) (string,
 		return "", err
 	}
 	return fmt.Sprintf("branch deleted: %s", name), nil
+}
+
+func (s *FastgitService) branchForceSync(ctx context.Context, name string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	current, err := s.currentBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	if _, err := repo.Reference(plumbing.NewBranchReferenceName(name), true); err != nil {
+		return "", fmt.Errorf("local branch not found: %s", name)
+	}
+
+	remoteRef := "origin/" + name
+	if _, err := s.gitInRepo(ctx, "fetch", "--prune", "origin"); err != nil {
+		return "", err
+	}
+	if _, err := s.gitInRepo(ctx, "rev-parse", "--verify", "refs/remotes/"+remoteRef); err != nil {
+		return "", fmt.Errorf("remote branch not found: %s", remoteRef)
+	}
+
+	if current != name {
+		if _, err := s.gitInRepo(ctx, "clean", "-fd"); err != nil {
+			return "", err
+		}
+		if _, err := s.gitInRepo(ctx, "checkout", "-f", name); err != nil {
+			return "", err
+		}
+	}
+	if _, err := s.gitInRepo(ctx, "reset", "--hard", remoteRef); err != nil {
+		return "", err
+	}
+	if _, err := s.gitInRepo(ctx, "clean", "-fd"); err != nil {
+		return "", err
+	}
+
+	head, err := s.gitInRepo(ctx, "rev-parse", "--short", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"force aligned: %s -> %s\nHEAD=%s\nlocal changes discarded\nuntracked files removed",
+		name,
+		remoteRef,
+		strings.TrimSpace(head),
+	), nil
 }
 
 func (s *FastgitService) worktreeList(ctx context.Context) (string, error) {

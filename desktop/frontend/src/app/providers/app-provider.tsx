@@ -397,7 +397,11 @@ function relatedCatalogRefreshes(moduleId: string, actionId: string): Array<{ mo
     case "branch_create":
     case "branch_delete":
     case "branch_checkout":
-      return [{ moduleId: "branch", actionId: "branch_list" }];
+    case "branch_force_sync":
+      return [
+        { moduleId: "branch", actionId: "branch_list" },
+        { moduleId: "repo", actionId: "repo_status" },
+      ];
     case "worktree_create":
     case "worktree_remove":
       return [
