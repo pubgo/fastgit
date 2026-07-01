@@ -10,7 +10,10 @@ import type {
   DesktopModule,
   ModuleAction,
   OperationOutput,
+  OutputDetail,
   OutputListItem,
+  ProjectSettings,
+  ResourceCatalog,
   SidebarMenuType,
 } from "../types";
 
@@ -28,7 +31,19 @@ const initialOutput: OperationOutput = {
 const backend = new BackendService();
 
 const githubRowPattern = /^#(\d+)\s+\[([^\]]+)\]\s+(.+)$/;
+const githubHeaderPattern = /^#(\d+)\s+\[([^\]]+)\]$/;
 const statusRowPattern = /^(.{2})\s+(.+)$/;
+
+function createEmptyCatalog(): ResourceCatalog {
+  return {
+    branches: [],
+    issues: [],
+    tags: [],
+    worktrees: [],
+    prs: [],
+    repoStatus: [],
+  };
+}
 
 function parseBranchItems(body: string): OutputListItem[] {
   const lines = body.split(/\r?\n/).map((line) => line.trimEnd());
@@ -51,6 +66,12 @@ function parseBranchItems(body: string): OutputListItem[] {
       primary,
       active,
       badge: active ? "current" : undefined,
+      value: primary,
+      keywords: [primary, active ? "current" : ""].filter(Boolean),
+      fields: {
+        branch: primary,
+        status: active ? "current" : "local",
+      },
     });
   });
 
@@ -65,6 +86,11 @@ function parseTagItems(body: string): OutputListItem[] {
     .map((tag, index) => ({
       id: `${tag}-${index}`,
       primary: tag,
+      value: tag,
+      keywords: [tag],
+      fields: {
+        tag,
+      },
     }));
 }
 
@@ -83,6 +109,14 @@ function parseIssueLikeItems(body: string): OutputListItem[] {
           id: `${match[1]}-${index}`,
           primary: `#${match[1]} ${match[3]}`,
           badge: match[2],
+          category: match[2],
+          value: match[1],
+          keywords: [match[1], match[2], match[3]],
+          fields: {
+            number: match[1],
+            title: match[3],
+            state: match[2],
+          },
         },
       ];
     });
@@ -107,10 +141,140 @@ function parsePrStatusItems(body: string): OutputListItem[] {
       id: `pr-${match[1]}`,
       primary: `#${match[1]} ${title}`,
       badge: match[2],
+      category: match[2],
       secondary: url,
       url,
+      value: match[1],
+      keywords: [match[1], match[2], title, url ?? ""].filter(Boolean),
+      fields: {
+        number: match[1],
+        title,
+        state: match[2],
+        url: url ?? "",
+      },
     },
   ];
+}
+
+function parsePrStatusDetail(body: string): OutputDetail | null {
+  const lines = body.split(/\r?\n/);
+  const header = lines[0]?.trim() ?? "";
+  const title = lines[1]?.trim() ?? "";
+  const url = lines.find((line, index) => index > 0 && /^https?:\/\//.test(line.trim()))?.trim();
+  const match = header.match(githubHeaderPattern);
+  if (!match || !title) {
+    return null;
+  }
+
+  const base = lines.find((line) => line.startsWith("base: "))?.slice("base: ".length).trim();
+  const head = lines.find((line) => line.startsWith("head: "))?.slice("head: ".length).trim();
+  const draft = lines.find((line) => line.startsWith("draft: "))?.slice("draft: ".length).trim();
+  const bodyStartIndex = lines.findIndex((line, index) => index > 1 && line.trim() === "");
+  const detailBody =
+    bodyStartIndex >= 0
+      ? lines.slice(bodyStartIndex + 1).join("\n").trim()
+      : "";
+
+  return {
+    targetId: `pr-${match[1]}`,
+    primary: `#${match[1]} ${title}`,
+    secondary: url,
+    badge: match[2],
+    url,
+    body: detailBody || undefined,
+    fields: [
+      { label: "PR", value: `#${match[1]}` },
+      { label: "状态", value: match[2] },
+      ...(base ? [{ label: "Base", value: base }] : []),
+      ...(head ? [{ label: "Head", value: head }] : []),
+      ...(draft ? [{ label: "Draft", value: draft }] : []),
+      ...(url ? [{ label: "链接", value: url, href: url }] : []),
+    ],
+  };
+}
+
+function parseIssueDetail(body: string): OutputDetail | null {
+  const lines = body.split(/\r?\n/);
+  const header = lines[0]?.trim() ?? "";
+  const title = lines[1]?.trim() ?? "";
+  const url = lines.find((line, index) => index > 0 && /^https?:\/\//.test(line.trim()))?.trim();
+  const match = header.match(githubHeaderPattern);
+  if (!match || !title) {
+    return null;
+  }
+
+  const bodyStartIndex = lines.findIndex((line, index) => index > 1 && line.trim() === "");
+  const detailBody =
+    bodyStartIndex >= 0
+      ? lines.slice(bodyStartIndex + 1).join("\n").trim()
+      : lines.slice(url ? 3 : 2).join("\n").trim();
+
+  return {
+    targetId: match[1],
+    primary: `#${match[1]} ${title}`,
+    secondary: url,
+    badge: match[2],
+    url,
+    body: detailBody || undefined,
+    fields: [
+      { label: "Issue", value: `#${match[1]}` },
+      { label: "状态", value: match[2] },
+      ...(url ? [{ label: "链接", value: url, href: url }] : []),
+    ],
+  };
+}
+
+function parseUrlActionDetail(actionID: string, body: string): OutputDetail | null {
+  const urlMatch = body.match(/https?:\/\/\S+/);
+  if (!urlMatch) {
+    return null;
+  }
+  const url = urlMatch[0];
+
+  switch (actionID) {
+    case "issue_create":
+      return {
+        primary: "Issue 创建成功",
+        secondary: url,
+        badge: "created",
+        url,
+        fields: [{ label: "链接", value: url, href: url }],
+      };
+    case "pr_create":
+      return {
+        primary: body.startsWith("PR already exists:") ? "PR 已存在" : "PR 创建成功",
+        secondary: url,
+        badge: body.startsWith("PR already exists:") ? "exists" : "created",
+        url,
+        fields: [{ label: "链接", value: url, href: url }],
+      };
+    case "pr_sync":
+      return {
+        primary: "PR 已同步",
+        secondary: url,
+        badge: "updated",
+        url,
+        fields: [{ label: "链接", value: url, href: url }],
+      };
+    default:
+      return null;
+  }
+}
+
+function parseMergeDetail(body: string): OutputDetail | null {
+  const match = body.match(/^merged=(true|false)\s+message=(.+)$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    primary: match[1] === "true" ? "PR 合并完成" : "PR 合并未完成",
+    badge: match[1] === "true" ? "merged" : "pending",
+    body: match[2],
+    fields: [
+      { label: "结果", value: match[1] === "true" ? "merged" : "not merged" },
+      { label: "消息", value: match[2] },
+    ],
+  };
 }
 
 function parseRepoStatusItems(body: string): OutputListItem[] {
@@ -129,6 +293,12 @@ function parseRepoStatusItems(body: string): OutputListItem[] {
           id: `repo-${index}`,
           primary: match[2],
           badge: code,
+          category: code,
+          keywords: [code, match[2]],
+          fields: {
+            path: match[2],
+            status: code,
+          },
         },
       ];
     });
@@ -153,6 +323,14 @@ function parseWorktreeItems(body: string, repoPath: string): OutputListItem[] {
       secondary: details || undefined,
       active: path === repoPath,
       badge: path === repoPath ? "current" : undefined,
+      value: branch || path,
+      keywords: [path, branch, head, path === repoPath ? "current" : ""].filter(Boolean),
+      fields: {
+        path,
+        branch: branch || "-",
+        commit: head ? head.slice(0, 8) : "-",
+        status: path === repoPath ? "current" : "attached",
+      },
     });
   };
 
@@ -182,7 +360,68 @@ function parseWorktreeItems(body: string, repoPath: string): OutputListItem[] {
   return items;
 }
 
-function toStructuredOutput(actionID: string, body: string, repoPath: string): Pick<OperationOutput, "items" | "emptyHint"> {
+function updateCatalog(catalog: ResourceCatalog, actionID: string, items?: OutputListItem[]): ResourceCatalog {
+  if (!items) {
+    return catalog;
+  }
+
+  switch (actionID) {
+    case "branch_list":
+      return { ...catalog, branches: items };
+    case "issue_list":
+      return { ...catalog, issues: items };
+    case "tag_list":
+      return { ...catalog, tags: items };
+    case "worktree_list":
+      return { ...catalog, worktrees: items };
+    case "pr_status":
+      return { ...catalog, prs: items };
+    case "repo_status":
+      return { ...catalog, repoStatus: items };
+    default:
+      return catalog;
+  }
+}
+
+function findModuleAction(modules: DesktopModule[], moduleID: string, actionID: string): { module: DesktopModule; action: ModuleAction } | null {
+  const module = modules.find((item) => item.id === moduleID);
+  const action = module?.actions?.find((item) => item.id === actionID);
+  if (!module || !action) {
+    return null;
+  }
+  return { module, action };
+}
+
+function relatedCatalogRefreshes(moduleId: string, actionId: string): Array<{ moduleId: string; actionId: string }> {
+  switch (actionId) {
+    case "branch_create":
+    case "branch_delete":
+    case "branch_checkout":
+      return [{ moduleId: "branch", actionId: "branch_list" }];
+    case "worktree_create":
+    case "worktree_remove":
+      return [
+        { moduleId: "worktree", actionId: "worktree_list" },
+        { moduleId: "branch", actionId: "branch_list" },
+      ];
+    case "issue_create":
+      return [{ moduleId: "issue", actionId: "issue_list" }];
+    case "tag_publish":
+    case "tag_push":
+      return [{ moduleId: "tag", actionId: "tag_list" }];
+    case "repo_pull":
+    case "repo_push":
+      return [{ moduleId: "repo", actionId: "repo_status" }];
+    case "pr_create":
+    case "pr_sync":
+    case "pr_merge":
+      return [{ moduleId: "pr", actionId: "pr_status" }];
+    default:
+      return [];
+  }
+}
+
+function toStructuredOutput(actionID: string, body: string, repoPath: string): Pick<OperationOutput, "items" | "detail" | "emptyHint"> {
   const normalized = body.trim();
   switch (actionID) {
     case "branch_list": {
@@ -211,6 +450,7 @@ function toStructuredOutput(actionID: string, body: string, repoPath: string): P
       const items = parsePrStatusItems(normalized);
       return {
         items,
+        detail: items.length > 0 ? parsePrStatusDetail(normalized) ?? undefined : undefined,
         emptyHint: normalized === "no open PR for current branch" ? "当前分支暂无 open PR" : undefined,
       };
     }
@@ -221,6 +461,20 @@ function toStructuredOutput(actionID: string, body: string, repoPath: string): P
         emptyHint: normalized === "working tree clean" ? "工作区干净" : undefined,
       };
     }
+    case "issue_view":
+      return {
+        detail: parseIssueDetail(normalized) ?? undefined,
+      };
+    case "issue_create":
+    case "pr_create":
+    case "pr_sync":
+      return {
+        detail: parseUrlActionDetail(actionID, normalized) ?? undefined,
+      };
+    case "pr_merge":
+      return {
+        detail: parseMergeDetail(normalized) ?? undefined,
+      };
     default:
       return {};
   }
@@ -286,6 +540,8 @@ function createInitialState(): AppState {
     repoPath: selectedRepoPath,
     repoNamespaces,
     repoStatus: "加载中...",
+    githubAuthStatus: null,
+    projectSettings: prefs.projectSettings ?? {},
     modules: [],
     selectedModuleId: null,
     openedModuleIds: [],
@@ -294,11 +550,68 @@ function createInitialState(): AppState {
     modulePaneCollapsed: prefs.modulePaneCollapsed ?? false,
     busy: false,
     output: initialOutput,
+    catalog: createEmptyCatalog(),
   };
 }
 
 export function AppProvider({ children }: AppProviderProps) {
   const [state, setState] = useState<AppState>(createInitialState);
+
+  const refreshGitHubAuthStatus = useCallback(async () => {
+    try {
+      const status = await backend.getGitHubAuthStatus();
+      setState((prev) => ({
+        ...prev,
+        githubAuthStatus: status,
+      }));
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        githubAuthStatus: {
+          configured: false,
+          source: "none",
+          message: `GitHub 状态读取失败: ${String(error)}`,
+        },
+      }));
+    }
+  }, []);
+
+  const applyResultToState = useCallback(
+    (
+      module: DesktopModule,
+      action: ModuleAction,
+      result: { command: string; exitCode: number; output: string },
+      repoPath: string,
+      overrides?: Partial<OperationOutput>
+    ) => {
+      const structured = result.exitCode === 0 ? toStructuredOutput(action.id, result.output || "", repoPath) : {};
+      setState((prev) => ({
+        ...prev,
+        output: {
+          title: `${module.title} / ${action.title}`,
+          command: result.command,
+          exitCode: result.exitCode,
+          body: result.output || "(no output)",
+          moduleId: module.id,
+          actionId: action.id,
+          items: structured.items,
+          detail: structured.detail,
+          emptyHint: structured.emptyHint,
+          ...overrides,
+        },
+        catalog: result.exitCode === 0 ? updateCatalog(prev.catalog, action.id, structured.items) : prev.catalog,
+      }));
+    },
+    []
+  );
+
+  const requestAction = useCallback(async (moduleId: string, actionId: string, values: Record<string, string>) => {
+    return backend.runAction({
+      moduleID: moduleId,
+      actionID: actionId,
+      values,
+    });
+  }, []);
 
   const setBusy = useCallback((busy: boolean) => {
     setState((prev) => ({ ...prev, busy }));
@@ -327,6 +640,7 @@ export function AppProvider({ children }: AppProviderProps) {
           const availableIDs = new Set(modules.map((module) => module.id));
           const openedCandidate = storedTabs?.openedModuleIds ?? prev.openedModuleIds;
           const nextOpened = openedCandidate.filter((id) => availableIDs.has(id));
+          const repoChanged = prev.repoPath !== repoPath;
 
           return {
             ...prev,
@@ -336,8 +650,10 @@ export function AppProvider({ children }: AppProviderProps) {
             modules,
             selectedModuleId: nextSelected,
             openedModuleIds: upsertOpened(nextOpened, nextSelected),
+            catalog: repoChanged ? createEmptyCatalog() : prev.catalog,
           };
         });
+        void refreshGitHubAuthStatus();
       } catch (error) {
         const message = String(error);
         setState((prev) => ({
@@ -354,7 +670,7 @@ export function AppProvider({ children }: AppProviderProps) {
         setBusy(false);
       }
     },
-    [setBusy]
+    [refreshGitHubAuthStatus, setBusy]
   );
 
   const setSelectedModule = useCallback((moduleId: string) => {
@@ -559,6 +875,39 @@ export function AppProvider({ children }: AppProviderProps) {
     [refresh, state.repoNamespaces, state.repoPath]
   );
 
+  const setGitHubToken = useCallback(async (token: string) => {
+    await backend.setGitHubToken(token);
+    await refreshGitHubAuthStatus();
+    setState((prev) => ({
+      ...prev,
+      repoStatus: token.trim() ? "GitHub Token 已更新（当前会话）" : prev.repoStatus,
+    }));
+  }, [refreshGitHubAuthStatus]);
+
+  const updateProjectSettings = useCallback((patch: Partial<ProjectSettings>) => {
+    setState((prev) => {
+      const repoPath = prev.repoPath.trim();
+      if (!repoPath) {
+        return prev;
+      }
+      const current = prev.projectSettings[repoPath] ?? { defaultBaseBranch: "" };
+      return {
+        ...prev,
+        projectSettings: {
+          ...prev.projectSettings,
+          [repoPath]: {
+            ...current,
+            ...patch,
+          },
+        },
+        repoStatus:
+          "defaultBaseBranch" in patch
+            ? `项目默认 base branch 已更新: ${patch.defaultBaseBranch || "(未设置)"}`
+            : prev.repoStatus,
+      };
+    });
+  }, []);
+
   const runAction = useCallback(
     async (module: DesktopModule, action: ModuleAction, values: Record<string, string>) => {
       if (!state.repoPath) {
@@ -576,23 +925,29 @@ export function AppProvider({ children }: AppProviderProps) {
 
       setBusy(true);
       try {
-        const result = await backend.runAction({
-          moduleID: module.id,
-          actionID: action.id,
-          values,
-        });
-        const structured = result.exitCode === 0 ? toStructuredOutput(action.id, result.output || "", state.repoPath) : {};
-        setState((prev) => ({
-          ...prev,
-          output: {
-            title: `${module.title} / ${action.title}`,
-            command: result.command,
-            exitCode: result.exitCode,
-            body: result.output || "(no output)",
-            items: structured.items,
-            emptyHint: structured.emptyHint,
-          },
-        }));
+        const result = await requestAction(module.id, action.id, values);
+        applyResultToState(module, action, result, state.repoPath);
+
+        if (result.exitCode === 0) {
+          const refreshes = relatedCatalogRefreshes(module.id, action.id);
+          await Promise.all(
+            refreshes.map(async (refreshTarget) => {
+              const followup = findModuleAction(state.modules, refreshTarget.moduleId, refreshTarget.actionId);
+              if (!followup) {
+                return;
+              }
+              const followupResult = await requestAction(followup.module.id, followup.action.id, {});
+              if (followupResult.exitCode !== 0) {
+                return;
+              }
+              const structured = toStructuredOutput(followup.action.id, followupResult.output || "", state.repoPath);
+              setState((prev) => ({
+                ...prev,
+                catalog: updateCatalog(prev.catalog, followup.action.id, structured.items),
+              }));
+            })
+          );
+        }
       } catch (error) {
         setState((prev) => ({
           ...prev,
@@ -607,7 +962,127 @@ export function AppProvider({ children }: AppProviderProps) {
         setBusy(false);
       }
     },
-    [setBusy, state.repoPath]
+    [applyResultToState, requestAction, setBusy, state.modules, state.repoPath]
+  );
+
+  const runActionAndReload = useCallback(
+    async (module: DesktopModule, action: ModuleAction, values: Record<string, string>, reloadActionId: string) => {
+      if (!state.repoPath) {
+        return;
+      }
+
+      const reloadTarget = findModuleAction(state.modules, module.id, reloadActionId) ?? findModuleAction(state.modules, state.output.moduleId ?? module.id, reloadActionId);
+      if (!reloadTarget) {
+        await runAction(module, action, values);
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const result = await requestAction(module.id, action.id, values);
+        const actionStructured = result.exitCode === 0 ? toStructuredOutput(action.id, result.output || "", state.repoPath) : {};
+        if (result.exitCode !== 0) {
+          applyResultToState(module, action, result, state.repoPath);
+          return;
+        }
+
+        const reloadResult = await requestAction(reloadTarget.module.id, reloadTarget.action.id, {});
+        if (reloadResult.exitCode === 0) {
+          const reloadStructured = toStructuredOutput(reloadTarget.action.id, reloadResult.output || "", state.repoPath);
+          applyResultToState(reloadTarget.module, reloadTarget.action, reloadResult, state.repoPath, {
+            detail: actionStructured.detail ?? reloadStructured.detail,
+          });
+        } else {
+          applyResultToState(module, action, result, state.repoPath);
+        }
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          output: {
+            title: `${module.title} / ${action.title}`,
+            command: "RunAction",
+            exitCode: 1,
+            body: String(error),
+          },
+        }));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [applyResultToState, requestAction, runAction, setBusy, state.modules, state.output.moduleId, state.repoPath]
+  );
+
+  const previewAction = useCallback(
+    async (moduleId: string, actionId: string, values: Record<string, string> = {}) => {
+      if (!state.repoPath) {
+        return;
+      }
+
+      const target = findModuleAction(state.modules, moduleId, actionId);
+      if (!target) {
+        return;
+      }
+
+      try {
+        const result = await requestAction(moduleId, actionId, values);
+        if (result.exitCode !== 0) {
+          return;
+        }
+
+        const structured = toStructuredOutput(actionId, result.output || "", state.repoPath);
+        if (!structured.detail) {
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          output: {
+            ...prev.output,
+            command: prev.output.command,
+            detail: structured.detail,
+          },
+        }));
+      } catch {
+        return;
+      }
+    },
+    [requestAction, state.modules, state.repoPath]
+  );
+
+  const prefetchAction = useCallback(
+    async (moduleId: string, actionId: string, values: Record<string, string> = {}) => {
+      if (!state.repoPath) {
+        return;
+      }
+
+      if (!findModuleAction(state.modules, moduleId, actionId)) {
+        return;
+      }
+
+      try {
+        const result = await backend.runAction({
+          moduleID: moduleId,
+          actionID: actionId,
+          values,
+        });
+        if (result.exitCode !== 0) {
+          return;
+        }
+
+        const structured = toStructuredOutput(actionId, result.output || "", state.repoPath);
+        if (!structured.items) {
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          catalog: updateCatalog(prev.catalog, actionId, structured.items),
+        }));
+      } catch {
+        return;
+      }
+    },
+    [state.modules, state.repoPath]
   );
 
   const selectedModule = useMemo(() => {
@@ -629,8 +1104,9 @@ export function AppProvider({ children }: AppProviderProps) {
       modulePaneCollapsed: state.modulePaneCollapsed,
       repoNamespaces: state.repoNamespaces,
       selectedRepoPath: state.repoPath,
+      projectSettings: state.projectSettings,
     });
-  }, [state.modulePaneCollapsed, state.modulePaneWidth, state.repoNamespaces, state.repoPath, state.selectedMenu]);
+  }, [state.modulePaneCollapsed, state.modulePaneWidth, state.projectSettings, state.repoNamespaces, state.repoPath, state.selectedMenu]);
 
   useEffect(() => {
     if (!state.repoPath) {
@@ -663,10 +1139,16 @@ export function AppProvider({ children }: AppProviderProps) {
       setModulePaneWidth,
       setModulePaneCollapsed,
       refresh,
+      refreshGitHubAuthStatus,
       addRepo,
       switchRepo,
       removeRepo,
+      setGitHubToken,
+      updateProjectSettings,
       runAction,
+      runActionAndReload,
+      previewAction,
+      prefetchAction,
     }),
     [
       state,
@@ -682,10 +1164,16 @@ export function AppProvider({ children }: AppProviderProps) {
       setModulePaneWidth,
       setModulePaneCollapsed,
       refresh,
+      refreshGitHubAuthStatus,
       addRepo,
       switchRepo,
       removeRepo,
+      setGitHubToken,
+      updateProjectSettings,
       runAction,
+      runActionAndReload,
+      previewAction,
+      prefetchAction,
     ]
   );
 

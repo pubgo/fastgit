@@ -40,6 +40,9 @@ func main() {
 			Backdrop:                application.MacBackdropTranslucent,
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
+		Linux: application.LinuxWindow{
+			Icon: appIcon,
+		},
 		URL: "/",
 	})
 

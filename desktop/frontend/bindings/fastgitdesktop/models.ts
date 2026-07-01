@@ -30,6 +30,12 @@ export interface DesktopModule {
     "actions": ModuleAction[] | null;
 }
 
+export interface GitHubAuthStatus {
+    "configured": boolean;
+    "source": string;
+    "message": string;
+}
+
 export interface ModuleAction {
     "id": string;
     "title": string;

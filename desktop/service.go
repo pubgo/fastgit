@@ -51,6 +51,12 @@ type DesktopModule struct {
 	Actions     []ModuleAction `json:"actions"`
 }
 
+type GitHubAuthStatus struct {
+	Configured bool   `json:"configured"`
+	Source     string `json:"source"`
+	Message    string `json:"message"`
+}
+
 type ActionRunRequest struct {
 	ModuleID string            `json:"moduleID"`
 	ActionID string            `json:"actionID"`
@@ -58,7 +64,8 @@ type ActionRunRequest struct {
 }
 
 type FastgitService struct {
-	repoRoot string
+	repoRoot    string
+	githubToken string
 }
 
 func NewFastgitService() *FastgitService {
@@ -97,6 +104,56 @@ func (s *FastgitService) SetRepoRoot(path string) error {
 	}
 	s.repoRoot = abs
 	return nil
+}
+
+func (s *FastgitService) SetGitHubToken(token string) {
+	s.githubToken = strings.TrimSpace(token)
+}
+
+func (s *FastgitService) GetGitHubAuthStatus() GitHubAuthStatus {
+	token, source := s.githubTokenValue()
+	if token == "" {
+		return GitHubAuthStatus{
+			Configured: false,
+			Source:     "none",
+			Message:    "未配置 GitHub Token",
+		}
+	}
+
+	repo, err := s.openRepo()
+	if err != nil {
+		return GitHubAuthStatus{
+			Configured: true,
+			Source:     source,
+			Message:    fmt.Sprintf("Token 已就绪，但仓库不可用: %v", err),
+		}
+	}
+	remote, err := repo.Remote("origin")
+	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
+		return GitHubAuthStatus{
+			Configured: true,
+			Source:     source,
+			Message:    "Token 已就绪，但 origin remote 不可用",
+		}
+	}
+	owner, repoName, err := parseGitHubRemote(remote.Config().URLs[0])
+	if err != nil {
+		return GitHubAuthStatus{
+			Configured: true,
+			Source:     source,
+			Message:    fmt.Sprintf("Token 已就绪，但远端不是受支持的 GitHub 仓库: %v", err),
+		}
+	}
+
+	label := "环境变量"
+	if source == "session" {
+		label = "当前会话"
+	}
+	return GitHubAuthStatus{
+		Configured: true,
+		Source:     source,
+		Message:    fmt.Sprintf("GitHub 已连接: %s/%s (%s)", owner, repoName, label),
+	}
 }
 
 func (s *FastgitService) GetModules() []DesktopModule {
@@ -148,8 +205,15 @@ func (s *FastgitService) GetModules() []DesktopModule {
 			Description: "GitHub API（需 GITHUB_TOKEN）",
 			Actions: []ModuleAction{
 				{ID: "pr_status", Title: "PR 状态", Description: "查看当前分支对应 PR"},
-				{ID: "pr_create", Title: "创建 PR", Description: "为当前分支创建 PR"},
-				{ID: "pr_sync", Title: "同步 PR 内容", Description: "更新当前分支 PR 标题与正文"},
+				{ID: "pr_create", Title: "创建 PR", Description: "为当前分支创建 PR", Fields: []ActionField{
+					{Key: "title", Label: "标题", Placeholder: "Update feature/my-branch"},
+					{Key: "body", Label: "正文", Placeholder: "PR body"},
+					{Key: "base", Label: "目标分支", Placeholder: "main"},
+				}},
+				{ID: "pr_sync", Title: "同步 PR 内容", Description: "更新当前分支 PR 标题与正文", Fields: []ActionField{
+					{Key: "title", Label: "标题", Placeholder: "Update feature/my-branch"},
+					{Key: "body", Label: "正文", Placeholder: "PR body"},
+				}},
 				{ID: "pr_merge", Title: "合并 PR", Description: "合并当前分支 PR", Fields: []ActionField{{Key: "method", Label: "merge method", Placeholder: "squash|merge|rebase", Required: true, Default: "squash"}}},
 			},
 		},
@@ -276,9 +340,14 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 	case "pr_status":
 		return s.prStatus(ctx)
 	case "pr_create":
-		return s.prCreate(ctx)
+		title := optionalValue(values, "title", "")
+		body := optionalValue(values, "body", "")
+		base := optionalValue(values, "base", "")
+		return s.prCreate(ctx, title, body, base)
 	case "pr_sync":
-		return s.prSync(ctx)
+		title := optionalValue(values, "title", "")
+		body := optionalValue(values, "body", "")
+		return s.prSync(ctx, title, body)
 	case "pr_merge":
 		method := optionalValue(values, "method", "squash")
 		return s.prMerge(ctx, method)
@@ -653,7 +722,14 @@ func (s *FastgitService) issueView(ctx context.Context, number int) (string, err
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("#%d [%s]\n%s\n\n%s", issue.GetNumber(), issue.GetState(), issue.GetTitle(), strings.TrimSpace(issue.GetBody())), nil
+	return fmt.Sprintf(
+		"#%d [%s]\n%s\n%s\n\n%s",
+		issue.GetNumber(),
+		issue.GetState(),
+		issue.GetTitle(),
+		issue.GetHTMLURL(),
+		strings.TrimSpace(issue.GetBody()),
+	), nil
 }
 
 func (s *FastgitService) issueCreate(ctx context.Context, title, body string) (string, error) {
@@ -681,10 +757,21 @@ func (s *FastgitService) prStatus(ctx context.Context) (string, error) {
 	if pr == nil {
 		return "no open PR for current branch", nil
 	}
-	return fmt.Sprintf("#%d [%s]\n%s\n%s", pr.GetNumber(), pr.GetState(), pr.GetTitle(), pr.GetHTMLURL()), nil
+	body := strings.TrimSpace(pr.GetBody())
+	return fmt.Sprintf(
+		"#%d [%s]\n%s\n%s\nbase: %s\nhead: %s\ndraft: %t\n\n%s",
+		pr.GetNumber(),
+		pr.GetState(),
+		pr.GetTitle(),
+		pr.GetHTMLURL(),
+		pr.GetBase().GetRef(),
+		pr.GetHead().GetRef(),
+		pr.GetDraft(),
+		body,
+	), nil
 }
 
-func (s *FastgitService) prCreate(ctx context.Context) (string, error) {
+func (s *FastgitService) prCreate(ctx context.Context, title, body, base string) (string, error) {
 	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
 	if err != nil {
 		return "", err
@@ -697,9 +784,18 @@ func (s *FastgitService) prCreate(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	base := repoInfo.GetDefaultBranch()
-	title := "Update " + branch
-	body := "Generated by fastgit desktop SDK layer"
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = repoInfo.GetDefaultBranch()
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "Update " + branch
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		body = "Generated by fastgit desktop SDK layer"
+	}
 
 	newPR := &github.NewPullRequest{Title: github.Ptr(title), Head: github.Ptr(branch), Base: github.Ptr(base), Body: github.Ptr(body)}
 	created, _, err := client.PullRequests.Create(ctx, owner, repoName, newPR)
@@ -709,7 +805,7 @@ func (s *FastgitService) prCreate(ctx context.Context) (string, error) {
 	return created.GetHTMLURL(), nil
 }
 
-func (s *FastgitService) prSync(ctx context.Context) (string, error) {
+func (s *FastgitService) prSync(ctx context.Context, title, body string) (string, error) {
 	owner, repoName, client, branch, err := s.githubBranchClient(ctx)
 	if err != nil {
 		return "", err
@@ -721,8 +817,14 @@ func (s *FastgitService) prSync(ctx context.Context) (string, error) {
 	if pr == nil {
 		return "no open PR for current branch", nil
 	}
-	title := "Update " + branch
-	body := "Updated by fastgit desktop SDK layer"
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "Update " + branch
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		body = "Updated by fastgit desktop SDK layer"
+	}
 	edited := &github.PullRequest{Title: github.Ptr(title), Body: github.Ptr(body)}
 	updated, _, err := client.PullRequests.Edit(ctx, owner, repoName, pr.GetNumber(), edited)
 	if err != nil {
@@ -831,10 +933,7 @@ func (s *FastgitService) githubClient(ctx context.Context) (owner, repoName stri
 	if err != nil {
 		return "", "", nil, err
 	}
-	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("GH_TOKEN"))
-	}
+	token, _ := s.githubTokenValue()
 	if token == "" {
 		return "", "", nil, fmt.Errorf("GITHUB_TOKEN/GH_TOKEN is required for GitHub API operations")
 	}
@@ -898,10 +997,7 @@ func parseGitHubRemote(remote string) (owner, repo string, err error) {
 }
 
 func (s *FastgitService) clientOptions(repo *git.Repository) []client.Option {
-	token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("GH_TOKEN"))
-	}
+	token, _ := s.githubTokenValue()
 	if token == "" {
 		return nil
 	}
@@ -914,4 +1010,17 @@ func (s *FastgitService) clientOptions(repo *git.Repository) []client.Option {
 		return []client.Option{client.WithHTTPAuth(&httptransport.TokenAuth{Token: token})}
 	}
 	return nil
+}
+
+func (s *FastgitService) githubTokenValue() (token string, source string) {
+	if value := strings.TrimSpace(s.githubToken); value != "" {
+		return value, "session"
+	}
+	if value := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); value != "" {
+		return value, "env"
+	}
+	if value := strings.TrimSpace(os.Getenv("GH_TOKEN")); value != "" {
+		return value, "env"
+	}
+	return "", "none"
 }

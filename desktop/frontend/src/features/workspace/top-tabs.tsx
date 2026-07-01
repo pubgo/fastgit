@@ -64,13 +64,31 @@ export function TopTabs() {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; moduleId: string } | null>(null);
+  const [repoPickerOpen, setRepoPickerOpen] = useState(false);
+  const [repoQuery, setRepoQuery] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsPanelRef = useRef<HTMLDivElement | null>(null);
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const repoPickerRef = useRef<HTMLDivElement | null>(null);
+  const repoButtonRef = useRef<HTMLButtonElement | null>(null);
   const openedModules = state.openedModuleIds
     .map((id) => state.modules.find((module) => module.id === id))
     .filter((module): module is NonNullable<typeof module> => module !== undefined);
   const openedCount = openedModules.length;
+  const currentBaseBranch = state.projectSettings[state.repoPath]?.defaultBaseBranch ?? "";
+  const githubSummary = state.githubAuthStatus?.configured
+    ? `GitHub 已连接 · ${state.githubAuthStatus.source === "session" ? "会话 Token" : "环境变量"}`
+    : "GitHub 未连接";
+  const filteredRepos = useMemo(() => {
+    const keyword = repoQuery.trim().toLowerCase();
+    if (!keyword) {
+      return state.repoNamespaces;
+    }
+    return state.repoNamespaces.filter((repoPath) => {
+      const label = projectLabels.get(repoPath) ?? basename(repoPath);
+      return repoPath.toLowerCase().includes(keyword) || label.toLowerCase().includes(keyword);
+    });
+  }, [projectLabels, repoQuery, state.repoNamespaces]);
 
   const menuModule = useMemo(() => {
     if (!menu) {
@@ -86,20 +104,27 @@ export function TopTabs() {
     const onPointerDown = (event: PointerEvent) => {
       setMenu(null);
       if (!settingsOpen) {
-        return;
+        if (!repoPickerOpen) {
+          return;
+        }
       }
       const target = event.target as Node | null;
       if (!target) {
         return;
       }
+      if (repoButtonRef.current?.contains(target) || repoPickerRef.current?.contains(target)) {
+        return;
+      }
       if (settingsButtonRef.current?.contains(target) || settingsPanelRef.current?.contains(target)) {
         return;
       }
+      setRepoPickerOpen(false);
       setSettingsOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMenu(null);
+        setRepoPickerOpen(false);
         setSettingsOpen(false);
       }
     };
@@ -109,7 +134,7 @@ export function TopTabs() {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [settingsOpen]);
+  }, [repoPickerOpen, settingsOpen]);
 
   const handleDragStart = (event: DragEvent<HTMLDivElement>, moduleId: string) => {
     setDraggedId(moduleId);
@@ -152,8 +177,20 @@ export function TopTabs() {
   return (
     <header className="tabs-header app-drag-region">
       <div className="tabs-repo app-no-drag-region">
-        <img className="tabs-repo__logo" src={logoIcon} alt="fastgit logo" />
-        <span>{repoName}</span>
+        <button
+          ref={repoButtonRef}
+          type="button"
+          className="tabs-repo__button"
+          onClick={() => {
+            setRepoPickerOpen((value) => !value);
+            setRepoQuery("");
+          }}
+          aria-label="open project switcher"
+        >
+          <img className="tabs-repo__logo" src={logoIcon} alt="fastgit logo" />
+          <span>{repoName}</span>
+          {currentBaseBranch ? <small>{currentBaseBranch}</small> : null}
+        </button>
       </div>
 
       <div className="tabs-track app-no-drag-region">
@@ -245,6 +282,72 @@ export function TopTabs() {
           onPointerDown={(event) => event.stopPropagation()}
         >
           <RepoSwitcher />
+        </div>
+      )}
+
+      {repoPickerOpen && (
+        <div
+          ref={repoPickerRef}
+          className="tabs-project-panel app-no-drag-region"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <div className="tabs-project-panel__header">
+            <strong>快速切换项目</strong>
+            <span>{filteredRepos.length} / {state.repoNamespaces.length}</span>
+          </div>
+          <div className="tabs-project-panel__summary">
+            <strong>{repoName}</strong>
+            <span>{state.repoPath || "未选择项目"}</span>
+            <div className="tabs-project-panel__summary-meta">
+              <span>{currentBaseBranch ? `base ${currentBaseBranch}` : "未设置默认 base"}</span>
+              <span>{githubSummary}</span>
+            </div>
+            <div className="tabs-project-panel__summary-actions">
+              <button
+                type="button"
+                className="tabs-project-panel__summary-button"
+                onClick={() => {
+                  setRepoPickerOpen(false);
+                  setSettingsOpen(true);
+                }}
+              >
+                打开项目设置
+              </button>
+            </div>
+          </div>
+          <input
+            className="ui-input tabs-project-panel__search"
+            value={repoQuery}
+            onChange={(event) => setRepoQuery(event.target.value)}
+            placeholder="搜索项目..."
+            autoFocus
+          />
+          <div className="tabs-project-panel__list">
+            {filteredRepos.map((repoPath) => {
+              const active = repoPath === state.repoPath;
+              const baseBranch = state.projectSettings[repoPath]?.defaultBaseBranch ?? "";
+              return (
+                <button
+                  key={repoPath}
+                  type="button"
+                  className={active ? "tabs-project-item tabs-project-item--active" : "tabs-project-item"}
+                  onClick={() => {
+                    void switchRepo(repoPath);
+                    setRepoPickerOpen(false);
+                    setRepoQuery("");
+                  }}
+                >
+                  <span className="tabs-project-item__title">{projectLabels.get(repoPath) ?? basename(repoPath)}</span>
+                  <span className="tabs-project-item__path">{repoPath}</span>
+                  <span className="tabs-project-item__meta">
+                    {active ? "当前项目" : "切换到该项目"}
+                    {baseBranch ? ` · base ${baseBranch}` : ""}
+                  </span>
+                </button>
+              );
+            })}
+            {filteredRepos.length === 0 ? <div className="tabs-project-panel__empty">没有匹配的项目</div> : null}
+          </div>
         </div>
       )}
 

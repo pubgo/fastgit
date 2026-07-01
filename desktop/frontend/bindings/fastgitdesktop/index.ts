@@ -11,5 +11,6 @@ export type {
     ActionRunRequest,
     CommandResult,
     DesktopModule,
+    GitHubAuthStatus,
     ModuleAction
 } from "./models.js";

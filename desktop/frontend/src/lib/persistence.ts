@@ -1,4 +1,4 @@
-import type { SidebarMenuType } from "../app/types";
+import type { ProjectSettings, SidebarMenuType } from "../app/types";
 
 const PREFS_KEY = "fastgit.desktop.prefs.v1";
 
@@ -8,6 +8,7 @@ export interface DesktopPrefs {
   modulePaneCollapsed: boolean;
   repoNamespaces: string[];
   selectedRepoPath: string;
+  projectSettings: Record<string, ProjectSettings>;
 }
 
 interface WorkspaceTabs {
@@ -17,6 +18,24 @@ interface WorkspaceTabs {
 
 function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function normalizeProjectSettings(input: unknown): Record<string, ProjectSettings> | undefined {
+  if (!input || typeof input !== "object") {
+    return undefined;
+  }
+
+  const entries = Object.entries(input as Record<string, unknown>)
+    .map(([repoPath, value]) => {
+      if (!repoPath.trim() || !value || typeof value !== "object") {
+        return null;
+      }
+      const defaultBaseBranch = String((value as Partial<ProjectSettings>).defaultBaseBranch ?? "").trim();
+      return [repoPath.trim(), { defaultBaseBranch }] as const;
+    })
+    .filter((entry): entry is readonly [string, ProjectSettings] => entry !== null);
+
+  return Object.fromEntries(entries);
 }
 
 export function loadPrefs(): Partial<DesktopPrefs> {
@@ -39,11 +58,13 @@ export function loadPrefs(): Partial<DesktopPrefs> {
       : undefined;
     const selectedRepoPath =
       typeof parsed.selectedRepoPath === "string" ? parsed.selectedRepoPath.trim() : undefined;
+    const projectSettings = normalizeProjectSettings(parsed.projectSettings);
 
     return {
       ...parsed,
       repoNamespaces,
       selectedRepoPath,
+      projectSettings,
     };
   } catch {
     return {};

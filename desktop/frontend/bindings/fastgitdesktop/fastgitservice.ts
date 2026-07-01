@@ -9,6 +9,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
+export function GetGitHubAuthStatus(): $CancellablePromise<$models.GitHubAuthStatus> {
+    return $Call.ByID(2218531742);
+}
+
 export function GetModules(): $CancellablePromise<$models.DesktopModule[] | null> {
     return $Call.ByID(1211788486);
 }
@@ -19,6 +23,10 @@ export function GetRepoRoot(): $CancellablePromise<string> {
 
 export function RunAction(req: $models.ActionRunRequest): $CancellablePromise<$models.CommandResult> {
     return $Call.ByID(465937298, req);
+}
+
+export function SetGitHubToken(token: string): $CancellablePromise<void> {
+    return $Call.ByID(35429655, token);
 }
 
 export function SetRepoRoot(path: string): $CancellablePromise<void> {
