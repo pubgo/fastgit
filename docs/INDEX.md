@@ -5,6 +5,7 @@
 - `architecture.md`：项目架构、启动流程、分层职责、关键数据流
 - `features.md`：功能总览、命令分组、场景化使用指南
 - `roadmap.md`：功能路线图、Issue 拆分建议、验收标准（DoD）
+- `desktop-status.md`：桌面端（Wails v3）开发状态、进度快照与回归清单
 - `copilot-dcos.md`：Copilot 融合开发的 DCOS 落地清单
 
 团队仓库规则见 `fastgit team init` 生成的 `.fastgit/*.yaml`（`policy` / `commit` / `check`），功能说明在 `features.md` §2.5；配置合并优先级与 `FASTGIT_AI_CACHE` 等环境变量见 `features.md` §4 与 `architecture.md` §4。
@@ -16,8 +17,9 @@
 1. `architecture.md`
 2. `features.md`
 3. `roadmap.md`
-4. `README.md`
-5. `copilot-dcos.md`（按需）
+4. `desktop-status.md`
+5. `README.md`
+6. `copilot-dcos.md`（按需）
 
 ## 维护说明
 

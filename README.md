@@ -7,6 +7,7 @@ agentic git commit generate tool
 - 架构文档：`docs/architecture.md`
 - 功能文档：`docs/features.md`
 - 路线图文档：`docs/roadmap.md`
+- 桌面端进度：`docs/desktop-status.md`
 - Copilot DCOS：`docs/copilot-dcos.md`
 
 ## Desktop Client (Wails v3)
