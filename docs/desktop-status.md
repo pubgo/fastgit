@@ -76,8 +76,7 @@ task desktop:dev
 ### 4.2 构建验证
 
 ```bash
-task desktop:frontend:build
-task desktop:run
+task desktop:verify
 ```
 
 ### 4.3 最小回归清单
@@ -86,4 +85,3 @@ task desktop:run
 2. 在列表页执行搜索/过滤/排序，数据与计数同步变化。
 3. 对 `force_sync` 类动作，未输入 `RESET` 不可提交。
 4. 设置会话 Token 后，Issue/PR 模块可正常查询。
-

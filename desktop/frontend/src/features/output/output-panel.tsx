@@ -942,7 +942,7 @@ export function OutputPanel() {
     setQuery("");
     setBadgeFilter("all");
     setSortMode(getDefaultSortMode(state.output.actionId));
-    setViewMode(items.length > 0 ? "list" : state.output.detail ? "detail" : "raw");
+    setViewMode(isManageView ? "list" : items.length > 0 ? "list" : state.output.detail ? "detail" : "raw");
     setSelectedId(null);
     setSelectedIds([]);
     setPreviewingId(null);
@@ -951,7 +951,7 @@ export function OutputPanel() {
     setBatchAction(null);
     setBatchConfirm("");
     lastPreviewKeyRef.current = "";
-  }, [items.length, state.output.actionId, state.output.command, state.output.title]);
+  }, [isManageView, items.length, state.output.actionId, state.output.command, state.output.title, state.output.detail]);
 
   const badgeOptions = useMemo(
     () =>
@@ -1313,11 +1313,14 @@ export function OutputPanel() {
   };
 
   const hasStructuredDetail = Boolean(sideDetail || selectedItem || previewingId);
-  const viewOptions = [
-    ...(hasList ? [{ label: "列表", value: "list" as ViewMode }] : []),
-    { label: "详情", value: "detail" as ViewMode, disabled: !hasStructuredDetail && !state.output.detail },
-    ...(!SIMPLE_MODE || !isManageView ? [{ label: "原始输出", value: "raw" as ViewMode }] : []),
-  ];
+  const showViewTabs = !isManageView && (hasList || state.output.detail);
+  const viewOptions = showViewTabs
+    ? [
+        ...(hasList ? [{ label: "列表", value: "list" as ViewMode }] : []),
+        { label: "详情", value: "detail" as ViewMode, disabled: !hasStructuredDetail && !state.output.detail },
+        { label: "原始输出", value: "raw" as ViewMode },
+      ]
+    : [];
   const filterOptions = [
     { label: tableConfig.filterLabel, value: "all" },
     ...badgeOptions.map((badge) => ({
@@ -1474,7 +1477,7 @@ export function OutputPanel() {
           ))}
         </div>
       ) : null}
-      {(hasList || state.output.detail) ? (
+      {showViewTabs ? (
         <Segmented<ViewMode> className="output-viewtabs" value={viewMode} options={viewOptions} onChange={(next) => setViewMode(next)} />
       ) : null}
       <div className="output-content">

@@ -24,6 +24,8 @@
 
 ```bash
 task desktop:frontend:build
+task desktop:test
+task desktop:verify
 task desktop:run
 task desktop:dev
 ```

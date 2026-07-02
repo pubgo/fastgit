@@ -111,6 +111,12 @@ tasks:
       - task: desktop:bindings
       - npm run build
 
+  desktop:test:
+    desc: "run desktop go tests"
+    dir: "{{.DesktopDir}}"
+    cmds:
+      - go test ./...
+
   desktop:run:
     desc: "run desktop app from embedded frontend dist"
     dir: "{{.DesktopDir}}"
@@ -125,3 +131,9 @@ tasks:
       - task: desktop:node:check
       - task: desktop:frontend:build
       - go run .
+
+  desktop:verify:
+    desc: "desktop regression baseline (build + tests)"
+    cmds:
+      - task: desktop:frontend:build
+      - task: desktop:test
