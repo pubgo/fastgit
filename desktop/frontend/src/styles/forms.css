@@ -1,0 +1,81 @@
+.ui-button {
+  min-width: 72px;
+  font-weight: 700;
+}
+
+.ui-button.ant-btn {
+  border-radius: 10px;
+}
+
+.ui-button--default.ant-btn:not(.ant-btn-primary):not(:disabled):not(.ant-btn-disabled) {
+  color: #183252;
+  border-color: #7f9ec6;
+  background: #f8fbff;
+}
+
+.ui-button--default.ant-btn:not(.ant-btn-primary):not(:disabled):not(.ant-btn-disabled):hover {
+  color: #122b49;
+  border-color: #5e89c0;
+  background: #edf5ff;
+}
+
+.ui-button--ghost.ant-btn:not(.ant-btn-primary):not(:disabled):not(.ant-btn-disabled) {
+  color: #1e4a7a;
+  border-color: #5f85b7;
+  background: #eef5ff;
+}
+
+.ui-button--ghost.ant-btn:not(.ant-btn-primary):not(:disabled):not(.ant-btn-disabled):hover {
+  color: #173f6c;
+  border-color: #3b71af;
+  background: #deebff;
+}
+
+.ui-button--primary.ant-btn-primary:not(:disabled):not(.ant-btn-disabled) {
+  color: #ffffff;
+  border-color: #2d5ea8;
+  background: #2d5ea8;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.2) inset, 0 2px 8px rgba(45, 94, 168, 0.24);
+}
+
+.ui-button--primary.ant-btn-primary:not(:disabled):not(.ant-btn-disabled):hover {
+  border-color: #244d8b !important;
+  background: #244d8b !important;
+}
+
+.ui-button.ant-btn:disabled,
+.ui-button.ant-btn.ant-btn-disabled {
+  opacity: 0.76;
+}
+
+.ui-input,
+.ui-select,
+.ui-textarea {
+  width: 100%;
+}
+
+.action-dialog__body {
+  display: grid;
+  gap: 10px;
+}
+
+.action-dialog__description {
+  margin-bottom: 0 !important;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.action-field {
+  display: grid;
+  gap: 6px;
+}
+
+.action-field span {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.action-dialog__fields {
+  display: grid;
+  gap: 8px;
+}

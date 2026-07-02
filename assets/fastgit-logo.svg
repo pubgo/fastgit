@@ -1,0 +1,25 @@
+<svg width="860" height="240" viewBox="0 0 860 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fastgit logo">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="20" x2="220" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3C679F"/>
+      <stop offset="1" stop-color="#1F2D44"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="58" y1="70" x2="186" y2="172" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0F3F8"/>
+      <stop offset="1" stop-color="#D6DFEF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="20" width="196" height="196" rx="44" fill="url(#bg)"/>
+
+  <path d="M80 162V102C80 95.3726 85.3726 90 92 90H152C158.627 90 164 95.3726 164 102V124"
+        stroke="url(#stroke)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M122 90V124" stroke="url(#stroke)" stroke-width="14" stroke-linecap="round"/>
+
+  <circle cx="80" cy="162" r="14" fill="#E8EDF4"/>
+  <circle cx="122" cy="124" r="14" fill="#E8EDF4"/>
+  <circle cx="164" cy="124" r="14" fill="#E8EDF4"/>
+  <circle cx="122" cy="90" r="14" fill="#E8EDF4"/>
+
+  <text x="262" y="152" fill="#1F2D44" font-size="96" font-weight="700" font-family="Manrope, 'Avenir Next', 'Segoe UI', sans-serif">fastgit</text>
+</svg>

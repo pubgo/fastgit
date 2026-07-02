@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fastgit logo icon">
+  <defs>
+    <linearGradient id="bg" x1="72" y1="56" x2="448" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3C679F"/>
+      <stop offset="1" stop-color="#1F2D44"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="136" y1="152" x2="376" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0F3F8"/>
+      <stop offset="1" stop-color="#D6DFEF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="56" y="56" width="400" height="400" rx="96" fill="url(#bg)"/>
+
+  <path d="M168 336V208C168 194.745 178.745 184 192 184H320C333.255 184 344 194.745 344 208V256"
+        stroke="url(#stroke)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 184V256" stroke="url(#stroke)" stroke-width="28" stroke-linecap="round"/>
+
+  <circle cx="168" cy="336" r="30" fill="#E8EDF4"/>
+  <circle cx="256" cy="256" r="30" fill="#E8EDF4"/>
+  <circle cx="344" cy="256" r="30" fill="#E8EDF4"/>
+  <circle cx="256" cy="184" r="30" fill="#E8EDF4"/>
+</svg>

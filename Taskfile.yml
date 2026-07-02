@@ -5,6 +5,8 @@ version: '3'
 dotenv: [ '.env' ]
 vars:
   Project: "fastgit"
+  DesktopDir: "./desktop"
+  FrontendDir: "./desktop/frontend"
   Base: "github.com/pubgo/funk/buildinfo"
   VERSION:
     sh: "git tag --sort=committerdate | tail -n 1"
@@ -70,3 +72,68 @@ tasks:
   lint:
     cmds:
       - golangci-lint run --verbose ./...
+
+  desktop:bindings:
+    desc: "generate Wails bindings for desktop frontend"
+    dir: "{{.DesktopDir}}"
+    cmds:
+      - go run github.com/wailsapp/wails/v3/cmd/wails3@latest generate bindings -clean=true -ts -i
+
+  desktop:node:check:
+    desc: "check Node.js version for Vite 8 (>=20.19 or >=22.12)"
+    run: once
+    cmds:
+      - |
+        node -e '
+          const [maj, min] = process.versions.node.split(".").map(Number);
+          const ok = (maj === 20 && min >= 19) || (maj === 22 && min >= 12) || maj > 22;
+          if (!ok) {
+            console.error("Node.js " + process.versions.node + " is not supported.");
+            console.error("Please use Node >=20.19.0 or >=22.12.0 for Vite 8.");
+            process.exit(1);
+          }
+          console.log("Node.js " + process.versions.node + " OK");
+        '
+
+  desktop:frontend:install:
+    desc: "install desktop frontend dependencies"
+    dir: "{{.FrontendDir}}"
+    deps:
+      - desktop:node:check
+    cmds:
+      - npm install
+
+  desktop:frontend:build:
+    desc: "build desktop frontend assets"
+    dir: "{{.FrontendDir}}"
+    cmds:
+      - task: desktop:frontend:install
+      - task: desktop:bindings
+      - npm run build
+
+  desktop:test:
+    desc: "run desktop go tests"
+    dir: "{{.DesktopDir}}"
+    cmds:
+      - go test ./...
+
+  desktop:run:
+    desc: "run desktop app from embedded frontend dist"
+    dir: "{{.DesktopDir}}"
+    cmds:
+      - task: desktop:frontend:build
+      - go run .
+
+  desktop:dev:
+    desc: "run desktop app in local dev mode (no wails3 hot reload)"
+    dir: "{{.DesktopDir}}"
+    cmds:
+      - task: desktop:node:check
+      - task: desktop:frontend:build
+      - go run .
+
+  desktop:verify:
+    desc: "desktop regression baseline (build + tests)"
+    cmds:
+      - task: desktop:frontend:build
+      - task: desktop:test
