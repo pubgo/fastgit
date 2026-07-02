@@ -11,6 +11,9 @@ import { TopTabs } from "../features/workspace/top-tabs";
 export function DesktopLayout() {
   const { state, setModulePaneWidth } = useAppContext();
   const [isDragging, setIsDragging] = useState(false);
+  const actionID = state.output.actionId ?? "";
+  const isManageView = actionID.endsWith("_list") || actionID.endsWith("_status");
+  const hideModuleActions = isManageView;
 
   const onResizeStart = (event: MouseEvent<HTMLDivElement>) => {
     if (window.innerWidth <= 900 || state.modulePaneCollapsed) {
@@ -68,8 +71,8 @@ export function DesktopLayout() {
             aria-label="resize sidebar"
           />
         </div>
-        <div className="desktop-main">
-          <ModuleActions />
+        <div className={hideModuleActions ? "desktop-main desktop-main--single" : "desktop-main"}>
+          {!hideModuleActions ? <ModuleActions /> : null}
           <OutputPanel />
         </div>
       </section>

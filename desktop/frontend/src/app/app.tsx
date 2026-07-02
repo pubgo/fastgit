@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ConfigProvider } from "antd";
 
 import { AppProvider } from "./providers/app-provider";
 import { useAppContext } from "./providers/app-context";
@@ -17,8 +18,25 @@ function AppBootstrap() {
 
 export function App() {
   return (
-    <AppProvider>
-      <AppBootstrap />
-    </AppProvider>
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: "#4f7fc4",
+          colorInfo: "#4f7fc4",
+          borderRadius: 10,
+          fontFamily: '"Manrope", "Avenir Next", sans-serif',
+        },
+        components: {
+          Button: { controlHeight: 36 },
+          Input: { controlHeight: 36 },
+          Select: { controlHeight: 36 },
+          Modal: { borderRadiusLG: 14 },
+        },
+      }}
+    >
+      <AppProvider>
+        <AppBootstrap />
+      </AppProvider>
+    </ConfigProvider>
   );
 }

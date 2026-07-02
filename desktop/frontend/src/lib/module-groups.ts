@@ -3,6 +3,7 @@ import type { DesktopModule, SidebarMenuType } from "../app/types";
 export function menuForModule(moduleId: string): SidebarMenuType {
   switch (moduleId) {
     case "repo":
+    case "remote":
     case "branch":
     case "worktree":
       return "source";

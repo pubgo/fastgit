@@ -31,7 +31,8 @@ function normalizeProjectSettings(input: unknown): Record<string, ProjectSetting
         return null;
       }
       const defaultBaseBranch = String((value as Partial<ProjectSettings>).defaultBaseBranch ?? "").trim();
-      return [repoPath.trim(), { defaultBaseBranch }] as const;
+      const defaultRemote = String((value as Partial<ProjectSettings>).defaultRemote ?? "").trim();
+      return [repoPath.trim(), { defaultBaseBranch, defaultRemote }] as const;
     })
     .filter((entry): entry is readonly [string, ProjectSettings] => entry !== null);
 

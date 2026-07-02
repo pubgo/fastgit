@@ -1,5 +1,6 @@
 import { PanelRightClose } from "lucide-react";
 
+import type { ModuleAction } from "../../app/types";
 import { Button } from "../../components/ui/button";
 import { cn } from "../../lib/classnames";
 import { useAppContext } from "../../app/providers/app-context";
@@ -11,9 +12,25 @@ const menuTitles: Record<string, string> = {
   all: "全部模块",
 };
 
+function findLandingAction(actions: ModuleAction[]): ModuleAction | null {
+  return actions.find((action) => (action.id.endsWith("_list") || action.id.endsWith("_status")) && (action.fields?.length ?? 0) === 0) ?? null;
+}
+
 export function ModuleSidebar() {
-  const { state, filteredModules, setSelectedModule, setModulePaneCollapsed, refresh } = useAppContext();
+  const { state, filteredModules, setSelectedModule, setModulePaneCollapsed, refresh, runAction } = useAppContext();
   const menuTitle = menuTitles[state.selectedMenu] ?? "模块";
+
+  const onModuleSelect = (moduleId: string) => {
+    const module = filteredModules.find((item) => item.id === moduleId);
+    if (!module) {
+      return;
+    }
+    setSelectedModule(module.id);
+    const landingAction = findLandingAction(module.actions);
+    if (landingAction) {
+      void runAction(module, landingAction, {});
+    }
+  };
 
   return (
     <aside className="module-pane">
@@ -42,7 +59,7 @@ export function ModuleSidebar() {
               "module-pane__item",
               state.selectedModuleId === module.id && "module-pane__item--active"
             )}
-            onClick={() => setSelectedModule(module.id)}
+            onClick={() => onModuleSelect(module.id)}
             type="button"
           >
             <strong>{module.title}</strong>

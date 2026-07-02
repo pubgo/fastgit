@@ -17,6 +17,8 @@ import (
 	gitconfig "github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/client"
+	formatconfig "github.com/go-git/go-git/v6/plumbing/format/config"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	transport "github.com/go-git/go-git/v6/plumbing/transport"
 	httptransport "github.com/go-git/go-git/v6/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v6/plumbing/transport/ssh"
@@ -174,11 +176,44 @@ func (s *FastgitService) GetModules() []DesktopModule {
 		{
 			ID:          "repo",
 			Title:       "仓库管理",
-			Description: "状态 / 拉取 / 推送",
+			Description: "状态 / 暂存 / 撤销暂存 / 丢弃 / 拉取 / 推送 / 强制对齐",
 			Actions: []ModuleAction{
 				{ID: "repo_status", Title: "状态", Description: "显示工作区状态"},
-				{ID: "repo_pull", Title: "拉取", Description: "拉取当前分支"},
-				{ID: "repo_push", Title: "推送", Description: "推送当前分支"},
+				{ID: "repo_stage_path", Title: "暂存文件", Description: "暂存指定文件改动", Fields: []ActionField{{Key: "path", Label: "文件路径", Placeholder: "src/main.go", Required: true}}},
+				{ID: "repo_unstage_path", Title: "撤销暂存", Description: "撤销指定文件暂存", Fields: []ActionField{{Key: "path", Label: "文件路径", Placeholder: "src/main.go", Required: true}}},
+				{ID: "repo_discard_path", Title: "丢弃文件改动", Description: "恢复指定文件到 HEAD（未跟踪文件会删除）", Fields: []ActionField{{Key: "path", Label: "文件路径", Placeholder: "src/main.go", Required: true}}},
+				{ID: "repo_pull", Title: "拉取", Description: "拉取当前分支", Fields: []ActionField{{Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}}},
+				{ID: "repo_push", Title: "推送", Description: "推送当前分支", Fields: []ActionField{{Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}}},
+				{ID: "repo_force_sync", Title: "强制对齐当前分支", Description: "丢弃当前分支本地改动并强制对齐 <remote>/<current>", Fields: []ActionField{{Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}, {Key: "confirm", Label: "确认文本", Placeholder: "输入 RESET 确认", Required: true}}},
+			},
+		},
+		{
+			ID:          "remote",
+			Title:       "Remote 管理",
+			Description: "列出 / 添加 / 编辑 / rename / 删除 / 抓取",
+			Actions: []ModuleAction{
+				{ID: "remote_list", Title: "列出 remote", Description: "显示当前仓库所有 remote"},
+				{ID: "remote_add", Title: "添加 remote", Description: "新增一个 remote", Fields: []ActionField{
+					{Key: "name", Label: "名称", Placeholder: "upstream", Required: true},
+					{Key: "url", Label: "URL", Placeholder: "git@github.com:owner/repo.git", Required: true},
+					{Key: "push_url", Label: "Push URL", Placeholder: "可选，单独推送地址"},
+				}},
+				{ID: "remote_update", Title: "编辑 remote", Description: "统一修改 remote 的 fetch / push URL", Fields: []ActionField{
+					{Key: "name", Label: "名称", Placeholder: "origin", Required: true},
+					{Key: "url", Label: "Fetch URL", Placeholder: "git@github.com:owner/repo.git", Required: true},
+					{Key: "push_url", Label: "Push URL", Placeholder: "可选，留空表示跟随 fetch URL"},
+				}},
+				{ID: "remote_rename", Title: "重命名 remote", Description: "修改 remote 名称", Fields: []ActionField{
+					{Key: "name", Label: "当前名称", Placeholder: "origin", Required: true},
+					{Key: "new_name", Label: "新名称", Placeholder: "upstream", Required: true},
+				}},
+				{ID: "remote_remove", Title: "删除 remote", Description: "删除指定 remote", Fields: []ActionField{
+					{Key: "name", Label: "名称", Placeholder: "upstream", Required: true},
+				}},
+				{ID: "remote_fetch", Title: "抓取 remote", Description: "抓取指定 remote 并 prune", Fields: []ActionField{
+					{Key: "name", Label: "名称", Placeholder: "origin", Required: true},
+				}},
+				{ID: "remote_fetch_all", Title: "抓取全部 remote", Description: "抓取所有 remote 并 prune"},
 			},
 		},
 		{
@@ -190,7 +225,7 @@ func (s *FastgitService) GetModules() []DesktopModule {
 				{ID: "branch_create", Title: "创建分支", Description: "创建新分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
 				{ID: "branch_checkout", Title: "切换分支", Description: "切换到指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
 				{ID: "branch_delete", Title: "删除分支", Description: "删除指定分支", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "feature/my-branch", Required: true}}},
-				{ID: "branch_force_sync", Title: "强制对齐远端", Description: "丢弃本地改动并强制对齐 origin/<branch>", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}}},
+				{ID: "branch_force_sync", Title: "强制对齐远端", Description: "丢弃本地改动并强制对齐 <remote>/<branch>", Fields: []ActionField{{Key: "name", Label: "分支名", Placeholder: "main", Required: true}, {Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}, {Key: "confirm", Label: "确认文本", Placeholder: "输入 RESET 确认", Required: true}}},
 			},
 		},
 		{
@@ -210,6 +245,7 @@ func (s *FastgitService) GetModules() []DesktopModule {
 			Actions: []ModuleAction{
 				{ID: "issue_list", Title: "列出 issue", Description: "列出 open issue"},
 				{ID: "issue_view", Title: "查看 issue", Description: "查看 issue 详情", Fields: []ActionField{{Key: "id", Label: "Issue ID", Placeholder: "123", Required: true}}},
+				{ID: "issue_close", Title: "关闭 issue", Description: "关闭指定 issue", Fields: []ActionField{{Key: "id", Label: "Issue ID", Placeholder: "123", Required: true}}},
 				{ID: "issue_create", Title: "创建 issue", Description: "创建 issue", Fields: []ActionField{{Key: "title", Label: "标题", Placeholder: "Issue title", Required: true}, {Key: "body", Label: "正文", Placeholder: "Issue body", Required: true}}},
 			},
 		},
@@ -218,6 +254,9 @@ func (s *FastgitService) GetModules() []DesktopModule {
 			Title:       "PR 管理",
 			Description: "GitHub API（需 GITHUB_TOKEN）",
 			Actions: []ModuleAction{
+				{ID: "pr_list", Title: "列出 PR", Description: "列出 open PR"},
+				{ID: "pr_view", Title: "查看 PR", Description: "查看 PR 详情", Fields: []ActionField{{Key: "id", Label: "PR ID", Placeholder: "123", Required: true}}},
+				{ID: "pr_close", Title: "关闭 PR", Description: "关闭指定 PR", Fields: []ActionField{{Key: "id", Label: "PR ID", Placeholder: "123", Required: true}}},
 				{ID: "pr_status", Title: "PR 状态", Description: "查看当前分支对应 PR"},
 				{ID: "pr_create", Title: "创建 PR", Description: "为当前分支创建 PR", Fields: []ActionField{
 					{Key: "title", Label: "标题", Placeholder: "Update feature/my-branch"},
@@ -234,11 +273,12 @@ func (s *FastgitService) GetModules() []DesktopModule {
 		{
 			ID:          "tag",
 			Title:       "Tag 管理",
-			Description: "列出 / 创建 / 推送",
+			Description: "列出 / 创建 / 推送 / 对齐远端",
 			Actions: []ModuleAction{
 				{ID: "tag_list", Title: "列出 tag", Description: "列出本地 tags"},
 				{ID: "tag_publish", Title: "创建 tag", Description: "在当前 HEAD 创建 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
-				{ID: "tag_push", Title: "推送 tag", Description: "推送指定 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}}},
+				{ID: "tag_push", Title: "推送 tag", Description: "推送指定 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}, {Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}}},
+				{ID: "tag_force_sync", Title: "强制对齐远端 tag", Description: "强制用指定 remote 上同名 tag 覆盖本地 tag", Fields: []ActionField{{Key: "name", Label: "Tag", Placeholder: "v1.2.3", Required: true}, {Key: "remote", Label: "Remote", Placeholder: "选择 remote", Required: true, Default: "origin"}, {Key: "confirm", Label: "确认文本", Placeholder: "输入 RESET 确认", Required: true}}},
 			},
 		},
 	}
@@ -294,10 +334,111 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 	switch actionID {
 	case "repo_status":
 		return s.repoStatus(ctx)
+	case "repo_stage_path":
+		path, err := requiredValue(values, "path", "文件路径")
+		if err != nil {
+			return "", err
+		}
+		return s.repoStagePath(ctx, path)
+	case "repo_unstage_path":
+		path, err := requiredValue(values, "path", "文件路径")
+		if err != nil {
+			return "", err
+		}
+		return s.repoUnstagePath(ctx, path)
+	case "repo_discard_path":
+		path, err := requiredValue(values, "path", "文件路径")
+		if err != nil {
+			return "", err
+		}
+		return s.repoDiscardPath(ctx, path)
 	case "repo_pull":
-		return s.repoPull(ctx)
+		return s.repoPull(ctx, optionalValue(values, "remote", ""))
 	case "repo_push":
-		return s.repoPush(ctx)
+		return s.repoPush(ctx, optionalValue(values, "remote", ""))
+	case "repo_force_sync":
+		remoteName := optionalValue(values, "remote", "")
+		confirm, err := requiredValue(values, "confirm", "确认文本")
+		if err != nil {
+			return "", err
+		}
+		if err := validateForceSyncConfirmation(confirm); err != nil {
+			return "", err
+		}
+		repo, err := s.openRepo()
+		if err != nil {
+			return "", err
+		}
+		name, err := s.currentBranch(repo)
+		if err != nil {
+			return "", err
+		}
+		return s.branchForceSync(ctx, remoteName, name)
+	case "remote_list":
+		return s.remoteList(ctx)
+	case "remote_add":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		url, err := requiredValue(values, "url", "URL")
+		if err != nil {
+			return "", err
+		}
+		pushURL := optionalValue(values, "push_url", "")
+		return s.remoteAdd(ctx, name, url, pushURL)
+	case "remote_rename":
+		name, err := requiredValue(values, "name", "当前名称")
+		if err != nil {
+			return "", err
+		}
+		newName, err := requiredValue(values, "new_name", "新名称")
+		if err != nil {
+			return "", err
+		}
+		return s.remoteRename(ctx, name, newName)
+	case "remote_update":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		url, err := requiredValue(values, "url", "Fetch URL")
+		if err != nil {
+			return "", err
+		}
+		pushURL := optionalValue(values, "push_url", "")
+		return s.remoteUpdate(ctx, name, url, pushURL)
+	case "remote_set_url":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		url, err := requiredValue(values, "url", "URL")
+		if err != nil {
+			return "", err
+		}
+		return s.remoteSetURL(ctx, name, url)
+	case "remote_set_push_url":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		url := optionalValue(values, "url", "")
+		return s.remoteSetPushURL(ctx, name, url)
+	case "remote_remove":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		return s.remoteRemove(ctx, name)
+	case "remote_fetch":
+		name, err := requiredValue(values, "name", "名称")
+		if err != nil {
+			return "", err
+		}
+		return s.remoteFetch(ctx, name)
+	case "remote_fetch_all":
+		return s.remoteFetchAll(ctx)
 	case "branch_list":
 		return s.branchList(ctx)
 	case "branch_create":
@@ -323,7 +464,15 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 		if err != nil {
 			return "", err
 		}
-		return s.branchForceSync(ctx, name)
+		remoteName := optionalValue(values, "remote", "")
+		confirm, err := requiredValue(values, "confirm", "确认文本")
+		if err != nil {
+			return "", err
+		}
+		if err := validateForceSyncConfirmation(confirm); err != nil {
+			return "", err
+		}
+		return s.branchForceSync(ctx, remoteName, name)
 	case "worktree_list":
 		return s.worktreeList(ctx)
 	case "worktree_create":
@@ -357,6 +506,26 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 			return "", err
 		}
 		return s.issueCreate(ctx, title, body)
+	case "issue_close":
+		id, err := requiredInt(values, "id", "Issue ID")
+		if err != nil {
+			return "", err
+		}
+		return s.issueClose(ctx, id)
+	case "pr_list":
+		return s.prList(ctx)
+	case "pr_view":
+		id, err := requiredInt(values, "id", "PR ID")
+		if err != nil {
+			return "", err
+		}
+		return s.prView(ctx, id)
+	case "pr_close":
+		id, err := requiredInt(values, "id", "PR ID")
+		if err != nil {
+			return "", err
+		}
+		return s.prClose(ctx, id)
 	case "pr_status":
 		return s.prStatus(ctx)
 	case "pr_create":
@@ -384,7 +553,21 @@ func (s *FastgitService) dispatchAction(ctx context.Context, actionID string, va
 		if err != nil {
 			return "", err
 		}
-		return s.tagPush(ctx, name)
+		return s.tagPush(ctx, optionalValue(values, "remote", ""), name)
+	case "tag_force_sync":
+		name, err := requiredValue(values, "name", "Tag")
+		if err != nil {
+			return "", err
+		}
+		remoteName := optionalValue(values, "remote", "")
+		confirm, err := requiredValue(values, "confirm", "确认文本")
+		if err != nil {
+			return "", err
+		}
+		if err := validateForceSyncConfirmation(confirm); err != nil {
+			return "", err
+		}
+		return s.tagForceSync(ctx, remoteName, name)
 	default:
 		return "", fmt.Errorf("unsupported action: %s", actionID)
 	}
@@ -404,6 +587,13 @@ func optionalValue(values map[string]string, key, def string) string {
 		return def
 	}
 	return v
+}
+
+func validateForceSyncConfirmation(v string) error {
+	if strings.TrimSpace(strings.ToUpper(v)) != "RESET" {
+		return errors.New("确认文本不正确，请输入 RESET")
+	}
+	return nil
 }
 
 func requiredInt(values map[string]string, key, label string) (int, error) {
@@ -494,7 +684,235 @@ func (s *FastgitService) repoStatus(ctx context.Context) (string, error) {
 	return strings.TrimSpace(b.String()), nil
 }
 
-func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
+func (s *FastgitService) repoStagePath(ctx context.Context, pathValue string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	path, fileStatus, err := s.resolveRepoStatusFile(wt, pathValue)
+	if err != nil {
+		return "", err
+	}
+	if fileStatus == nil || (fileStatus.Staging == git.Unmodified && fileStatus.Worktree == git.Unmodified) {
+		return "", fmt.Errorf("file has no changes: %s", path)
+	}
+	if _, err := wt.Add(path); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("staged: %s", path), nil
+}
+
+func (s *FastgitService) repoUnstagePath(ctx context.Context, pathValue string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	path, fileStatus, err := s.resolveRepoStatusFile(wt, pathValue)
+	if err != nil {
+		return "", err
+	}
+	if fileStatus == nil || fileStatus.Staging == git.Unmodified || fileStatus.Staging == git.Untracked {
+		return "", fmt.Errorf("file is not staged: %s", path)
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if err := wt.Reset(&git.ResetOptions{
+		Mode:   git.MixedReset,
+		Commit: head.Hash(),
+		Files:  []string{path},
+	}); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("unstaged: %s", path), nil
+}
+
+func (s *FastgitService) repoDiscardPath(ctx context.Context, pathValue string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	path, fileStatus, err := s.resolveRepoStatusFile(wt, pathValue)
+	if err != nil {
+		return "", err
+	}
+	if fileStatus == nil || (fileStatus.Staging == git.Unmodified && fileStatus.Worktree == git.Unmodified) {
+		return "", fmt.Errorf("file has no changes: %s", path)
+	}
+
+	isUntracked := fileStatus.Staging == git.Untracked && fileStatus.Worktree == git.Untracked
+	if isUntracked {
+		if err := s.removeRepoPath(path); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("discarded: %s (untracked removed)", path), nil
+	}
+
+	head, err := repo.Head()
+	if err != nil {
+		return "", err
+	}
+	if fileStatus.Staging != git.Unmodified {
+		if err := wt.Reset(&git.ResetOptions{
+			Mode:   git.MixedReset,
+			Commit: head.Hash(),
+			Files:  []string{path},
+		}); err != nil {
+			return "", err
+		}
+	}
+
+	tracked, err := s.pathTrackedAtHEAD(repo, path)
+	if err != nil {
+		return "", err
+	}
+	if tracked {
+		if _, err := s.gitInRepo(ctx, "checkout", "--", path); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("discarded: %s", path), nil
+	}
+
+	if err := s.removeRepoPath(path); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("discarded: %s (new file removed)", path), nil
+}
+
+func normalizeRepoRelativePath(pathValue string) (string, error) {
+	path := strings.TrimSpace(pathValue)
+	if path == "" {
+		return "", errors.New("文件路径不能为空")
+	}
+	path = strings.ReplaceAll(path, "\\", "/")
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == "" {
+		return "", errors.New("文件路径不能为空")
+	}
+	if filepath.IsAbs(clean) {
+		return "", fmt.Errorf("path must be relative to repository: %s", pathValue)
+	}
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes repository root: %s", pathValue)
+	}
+	return filepath.ToSlash(clean), nil
+}
+
+func findStatusPath(status git.Status, requested string) (string, *git.FileStatus) {
+	candidates := []string{
+		requested,
+		strings.TrimPrefix(requested, "./"),
+		filepath.ToSlash(requested),
+		filepath.Clean(filepath.FromSlash(requested)),
+		filepath.ToSlash(filepath.Clean(filepath.FromSlash(requested))),
+	}
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if fileStatus := status.File(candidate); fileStatus != nil {
+			return candidate, fileStatus
+		}
+	}
+
+	normalized := filepath.ToSlash(filepath.Clean(filepath.FromSlash(requested)))
+	for path, fileStatus := range status {
+		if fileStatus == nil {
+			continue
+		}
+		if filepath.ToSlash(filepath.Clean(filepath.FromSlash(path))) == normalized {
+			return path, fileStatus
+		}
+	}
+	return "", nil
+}
+
+func (s *FastgitService) resolveRepoStatusFile(wt *git.Worktree, pathValue string) (string, *git.FileStatus, error) {
+	if wt == nil {
+		return "", nil, errors.New("worktree is nil")
+	}
+	path, err := normalizeRepoRelativePath(pathValue)
+	if err != nil {
+		return "", nil, err
+	}
+	status, err := wt.Status()
+	if err != nil {
+		return "", nil, err
+	}
+	actualPath, fileStatus := findStatusPath(status, path)
+	if fileStatus == nil {
+		return "", nil, fmt.Errorf("path not found in current status: %s", path)
+	}
+	return actualPath, fileStatus, nil
+}
+
+func (s *FastgitService) pathTrackedAtHEAD(repo *git.Repository, path string) (bool, error) {
+	if repo == nil {
+		return false, errors.New("repo not opened")
+	}
+	head, err := repo.Head()
+	if err != nil {
+		return false, err
+	}
+	commit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return false, err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return false, err
+	}
+	_, err = tree.File(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, object.ErrFileNotFound) {
+		return false, nil
+	}
+	return false, err
+}
+
+func (s *FastgitService) removeRepoPath(path string) error {
+	normalized, err := normalizeRepoRelativePath(path)
+	if err != nil {
+		return err
+	}
+	target := filepath.Join(s.repoRoot, filepath.FromSlash(normalized))
+	rel, err := filepath.Rel(s.repoRoot, target)
+	if err != nil {
+		return err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path escapes repository root: %s", path)
+	}
+	if err := os.RemoveAll(target); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (s *FastgitService) repoPull(ctx context.Context, remoteName string) (string, error) {
 	repo, err := s.openRepo()
 	if err != nil {
 		return "", err
@@ -507,8 +925,12 @@ func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if isSSHRemoteRepo(repo) {
-		out, err := s.gitInRepo(ctx, "pull", "origin", branch)
+	remoteName, err = s.resolveRemoteName(repo, remoteName, branch)
+	if err != nil {
+		return "", err
+	}
+	if isSSHRemote(repo, remoteName) {
+		out, err := s.gitInRepo(ctx, "pull", remoteName, branch)
 		if err != nil {
 			return "", err
 		}
@@ -518,11 +940,11 @@ func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
 		return strings.TrimSpace(out), nil
 	}
 	opts := &git.PullOptions{
-		RemoteName:    "origin",
+		RemoteName:    remoteName,
 		ReferenceName: plumbing.NewBranchReferenceName(branch),
 		SingleBranch:  true,
 	}
-	opts.ClientOptions, err = s.clientOptions(repo)
+	opts.ClientOptions, err = s.clientOptionsForRemote(repo, remoteName)
 	if err != nil {
 		return "", err
 	}
@@ -535,13 +957,21 @@ func (s *FastgitService) repoPull(ctx context.Context) (string, error) {
 	return "pull completed", nil
 }
 
-func (s *FastgitService) repoPush(ctx context.Context) (string, error) {
+func (s *FastgitService) repoPush(ctx context.Context, remoteName string) (string, error) {
 	repo, err := s.openRepo()
 	if err != nil {
 		return "", err
 	}
-	if isSSHRemoteRepo(repo) {
-		out, err := s.gitInRepo(ctx, "push", "origin", "HEAD")
+	branch, err := s.currentBranch(repo)
+	if err != nil {
+		return "", err
+	}
+	remoteName, err = s.resolveRemoteName(repo, remoteName, branch)
+	if err != nil {
+		return "", err
+	}
+	if isSSHRemote(repo, remoteName) {
+		out, err := s.gitInRepo(ctx, "push", remoteName, "HEAD")
 		if err != nil {
 			return "", err
 		}
@@ -550,11 +980,16 @@ func (s *FastgitService) repoPush(ctx context.Context) (string, error) {
 		}
 		return strings.TrimSpace(out), nil
 	}
-	clientOptions, err := s.clientOptions(repo)
+	clientOptions, err := s.clientOptionsForRemote(repo, remoteName)
 	if err != nil {
 		return "", err
 	}
-	err = repo.PushContext(ctx, &git.PushOptions{RemoteName: "origin", ClientOptions: clientOptions})
+	refSpec := gitconfig.RefSpec(fmt.Sprintf("HEAD:refs/heads/%s", branch))
+	err = repo.PushContext(ctx, &git.PushOptions{
+		RemoteName:    remoteName,
+		RefSpecs:      []gitconfig.RefSpec{refSpec},
+		ClientOptions: clientOptions,
+	})
 	if err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return "already up-to-date", nil
@@ -564,9 +999,280 @@ func (s *FastgitService) repoPush(ctx context.Context) (string, error) {
 	return "push completed", nil
 }
 
+func (s *FastgitService) remoteList(ctx context.Context) (string, error) {
+	_ = ctx
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	if len(cfg.Remotes) == 0 {
+		return "no remotes", nil
+	}
+
+	type remoteEntry struct {
+		name      string
+		transport string
+		fetchURL  string
+		pushURL   string
+		status    string
+	}
+
+	entries := make([]remoteEntry, 0, len(cfg.Remotes))
+	for name, remoteCfg := range cfg.Remotes {
+		if remoteCfg == nil {
+			continue
+		}
+		fetchURL, pushURL := remoteURLsFromConfig(cfg, name)
+		if strings.TrimSpace(pushURL) == "" {
+			pushURL = fetchURL
+		}
+		status := "secondary"
+		if name == "origin" {
+			status = "default"
+		}
+		entries = append(entries, remoteEntry{
+			name:      name,
+			transport: remoteTransport(fetchURL),
+			fetchURL:  fetchURL,
+			pushURL:   pushURL,
+			status:    status,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].status == entries[j].status {
+			return entries[i].name < entries[j].name
+		}
+		return entries[i].status < entries[j].status
+	})
+
+	var b strings.Builder
+	for _, entry := range entries {
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\n", entry.name, entry.transport, entry.fetchURL, entry.pushURL, entry.status)
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+func (s *FastgitService) remoteAdd(ctx context.Context, name, url, pushURL string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	if _, err := repo.Remote(name); err == nil {
+		return "", fmt.Errorf("remote exists: %s", name)
+	}
+	_, err = repo.CreateRemote(&gitconfig.RemoteConfig{
+		Name:  name,
+		URLs:  []string{url},
+		Fetch: defaultRemoteFetchRefspecs(name),
+	})
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(pushURL) != "" {
+		cfg, err := s.repoConfig()
+		if err != nil {
+			return "", err
+		}
+		ensureRemoteRawOptions(cfg, name, url, pushURL)
+		if err := s.saveRepoConfig(cfg); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("remote added: %s -> %s\npush URL: %s", name, url, pushURL), nil
+	}
+	return fmt.Sprintf("remote added: %s -> %s", name, url), nil
+}
+
+func (s *FastgitService) remoteRename(ctx context.Context, name, newName string) (string, error) {
+	_ = ctx
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	remoteCfg, ok := cfg.Remotes[name]
+	if !ok {
+		return "", fmt.Errorf("remote not found: %s", name)
+	}
+	if name == newName {
+		return fmt.Sprintf("remote unchanged: %s", name), nil
+	}
+	if _, exists := cfg.Remotes[newName]; exists {
+		return "", fmt.Errorf("remote exists: %s", newName)
+	}
+
+	delete(cfg.Remotes, name)
+	remoteCfg.Name = newName
+	remoteCfg.Fetch = renameRemoteFetchRefspecs(remoteCfg.Fetch, name, newName)
+	cfg.Remotes[newName] = remoteCfg
+
+	for _, branchCfg := range cfg.Branches {
+		if branchCfg != nil && branchCfg.Remote == name {
+			branchCfg.Remote = newName
+		}
+	}
+
+	if cfg.Raw != nil {
+		cfg.Raw.RemoveSubsection(rawRemoteSection, name)
+	}
+	if err := s.saveRepoConfig(cfg); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("remote renamed: %s -> %s", name, newName), nil
+}
+
+func (s *FastgitService) remoteSetURL(ctx context.Context, name, url string) (string, error) {
+	_ = ctx
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	remoteCfg, ok := cfg.Remotes[name]
+	if !ok || remoteCfg == nil {
+		return "", fmt.Errorf("remote not found: %s", name)
+	}
+	remoteCfg.URLs = []string{url}
+	ensureRemoteRawOptions(cfg, name, url, currentPushURL(cfg, name))
+	if err := s.saveRepoConfig(cfg); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("remote updated: %s -> %s", name, url), nil
+}
+
+func (s *FastgitService) remoteUpdate(ctx context.Context, name, url, pushURL string) (string, error) {
+	if _, err := s.remoteSetURL(ctx, name, url); err != nil {
+		return "", err
+	}
+	if _, err := s.remoteSetPushURL(ctx, name, pushURL); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(pushURL) == "" {
+		return fmt.Sprintf("remote updated: %s -> %s (push follows fetch)", name, url), nil
+	}
+	return fmt.Sprintf("remote updated: %s -> %s (push %s)", name, url, pushURL), nil
+}
+
+func (s *FastgitService) remoteSetPushURL(ctx context.Context, name, url string) (string, error) {
+	_ = ctx
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	remoteCfg, ok := cfg.Remotes[name]
+	if !ok || remoteCfg == nil {
+		return "", fmt.Errorf("remote not found: %s", name)
+	}
+	fetchURL, _ := remoteURLsFromConfig(cfg, name)
+	if fetchURL == "" && len(remoteCfg.URLs) > 0 {
+		fetchURL = strings.TrimSpace(remoteCfg.URLs[0])
+	}
+	remoteCfg.URLs = []string{fetchURL}
+	ensureRemoteRawOptions(cfg, name, fetchURL, url)
+	if err := s.saveRepoConfig(cfg); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(url) == "" {
+		return fmt.Sprintf("remote push URL cleared: %s", name), nil
+	}
+	return fmt.Sprintf("remote push URL updated: %s -> %s", name, url), nil
+}
+
+func (s *FastgitService) remoteRemove(ctx context.Context, name string) (string, error) {
+	_ = ctx
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	if err := repo.DeleteRemote(name); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("remote removed: %s", name), nil
+}
+
+func (s *FastgitService) remoteFetch(ctx context.Context, name string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	remote, err := repo.Remote(name)
+	if err != nil {
+		return "", fmt.Errorf("remote not found: %s", name)
+	}
+	remoteCfg := remote.Config()
+	if remoteCfg == nil || len(remoteCfg.URLs) == 0 {
+		return "", fmt.Errorf("remote URL not found: %s", name)
+	}
+	fetchURL, _ := remoteURLsFromConfig(cfg, name)
+	if fetchURL == "" {
+		fetchURL = strings.TrimSpace(remoteCfg.URLs[0])
+	}
+	if isSSHRemoteURL(fetchURL) {
+		out, err := s.gitInRepo(ctx, "fetch", "--prune", name)
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(out) == "" {
+			return fmt.Sprintf("remote fetched: %s", name), nil
+		}
+		return strings.TrimSpace(out), nil
+	}
+	clientOptions, err := s.clientOptionsForURL(fetchURL)
+	if err != nil {
+		return "", err
+	}
+	err = repo.FetchContext(ctx, &git.FetchOptions{
+		RemoteName:    name,
+		RemoteURL:     fetchURL,
+		Prune:         true,
+		Tags:          plumbing.TagFollowing,
+		ClientOptions: clientOptions,
+	})
+	if err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "already up-to-date", nil
+		}
+		return "", err
+	}
+	return fmt.Sprintf("remote fetched: %s", name), nil
+}
+
+func (s *FastgitService) remoteFetchAll(ctx context.Context) (string, error) {
+	cfg, err := s.repoConfig()
+	if err != nil {
+		return "", err
+	}
+	if len(cfg.Remotes) == 0 {
+		return "no remotes", nil
+	}
+
+	names := make([]string, 0, len(cfg.Remotes))
+	for name := range cfg.Remotes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	results := make([]string, 0, len(names))
+	for _, name := range names {
+		out, err := s.remoteFetch(ctx, name)
+		if err != nil {
+			return strings.Join(results, "\n"), fmt.Errorf("fetch %s failed: %w", name, err)
+		}
+		results = append(results, out)
+	}
+	return strings.Join(results, "\n"), nil
+}
+
 func (s *FastgitService) branchList(ctx context.Context) (string, error) {
 	_ = ctx
 	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	cfg, err := s.repoConfig()
 	if err != nil {
 		return "", err
 	}
@@ -586,11 +1292,15 @@ func (s *FastgitService) branchList(ctx context.Context) (string, error) {
 	sort.Strings(branches)
 	var b strings.Builder
 	for _, name := range branches {
-		prefix := "  "
+		localStatus := "local"
 		if name == current {
-			prefix = "* "
+			localStatus = "current"
 		}
-		b.WriteString(prefix + name + "\n")
+		remoteName, upstreamName, syncState, ahead, behind, err := s.branchUpstreamSnapshot(repo, cfg, name)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\t%s\t%d\t%d\n", name, localStatus, remoteName, upstreamName, syncState, ahead, behind)
 	}
 	return strings.TrimSpace(b.String()), nil
 }
@@ -616,6 +1326,53 @@ func (s *FastgitService) branchCreate(ctx context.Context, name string) (string,
 		return "", err
 	}
 	return fmt.Sprintf("branch created: %s", name), nil
+}
+
+func (s *FastgitService) branchUpstreamSnapshot(repo *git.Repository, cfg *gitconfig.Config, branch string) (remoteName, upstreamName, syncState string, ahead, behind int, err error) {
+	if repo == nil {
+		return "", "", "", 0, 0, fmt.Errorf("repo not opened")
+	}
+
+	localRef, err := repo.Reference(plumbing.NewBranchReferenceName(branch), true)
+	if err != nil {
+		return "", "", "", 0, 0, err
+	}
+
+	branchCfg := cfg.Branches[branch]
+	if branchCfg == nil || strings.TrimSpace(branchCfg.Remote) == "" || branchCfg.Merge == "" {
+		return "", "", "no-upstream", 0, 0, nil
+	}
+
+	remoteName = strings.TrimSpace(branchCfg.Remote)
+	mergeName := plumbing.ReferenceName(branchCfg.Merge)
+	if !mergeName.IsBranch() {
+		return remoteName, "", "invalid-upstream", 0, 0, nil
+	}
+
+	upstreamName = remoteName + "/" + mergeName.Short()
+	upstreamRefName := plumbing.NewRemoteReferenceName(remoteName, mergeName.Short())
+	upstreamRef, err := repo.Reference(upstreamRefName, true)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return remoteName, upstreamName, "missing-upstream", 0, 0, nil
+		}
+		return "", "", "", 0, 0, err
+	}
+
+	localCommit, err := repo.CommitObject(localRef.Hash())
+	if err != nil {
+		return "", "", "", 0, 0, err
+	}
+	upstreamCommit, err := repo.CommitObject(upstreamRef.Hash())
+	if err != nil {
+		return "", "", "", 0, 0, err
+	}
+
+	syncState, ahead, behind, err = compareBranchCommits(localCommit, upstreamCommit)
+	if err != nil {
+		return "", "", "", 0, 0, err
+	}
+	return remoteName, upstreamName, syncState, ahead, behind, nil
 }
 
 func (s *FastgitService) branchCheckout(ctx context.Context, name string) (string, error) {
@@ -654,7 +1411,7 @@ func (s *FastgitService) branchDelete(ctx context.Context, name string) (string,
 	return fmt.Sprintf("branch deleted: %s", name), nil
 }
 
-func (s *FastgitService) branchForceSync(ctx context.Context, name string) (string, error) {
+func (s *FastgitService) branchForceSync(ctx context.Context, remoteName, name string) (string, error) {
 	repo, err := s.openRepo()
 	if err != nil {
 		return "", err
@@ -666,13 +1423,21 @@ func (s *FastgitService) branchForceSync(ctx context.Context, name string) (stri
 	if _, err := repo.Reference(plumbing.NewBranchReferenceName(name), true); err != nil {
 		return "", fmt.Errorf("local branch not found: %s", name)
 	}
+	remoteName, err = s.resolveRemoteName(repo, remoteName, name)
+	if err != nil {
+		return "", err
+	}
 
-	remoteRef := "origin/" + name
-	if _, err := s.gitInRepo(ctx, "fetch", "--prune", "origin"); err != nil {
+	remoteRef := remoteName + "/" + name
+	if _, err := s.gitInRepo(ctx, "fetch", "--prune", remoteName); err != nil {
 		return "", err
 	}
 	if _, err := s.gitInRepo(ctx, "rev-parse", "--verify", "refs/remotes/"+remoteRef); err != nil {
 		return "", fmt.Errorf("remote branch not found: %s", remoteRef)
+	}
+	preview, previewCount, err := s.forceSyncPreview(ctx)
+	if err != nil {
+		return "", err
 	}
 
 	if current != name {
@@ -694,12 +1459,37 @@ func (s *FastgitService) branchForceSync(ctx context.Context, name string) (stri
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(
-		"force aligned: %s -> %s\nHEAD=%s\nlocal changes discarded\nuntracked files removed",
-		name,
-		remoteRef,
-		strings.TrimSpace(head),
-	), nil
+	var b strings.Builder
+	fmt.Fprintf(&b, "force aligned: %s -> %s\n", name, remoteRef)
+	fmt.Fprintf(&b, "HEAD=%s\n", strings.TrimSpace(head))
+	if previewCount == 0 {
+		b.WriteString("discarded entries: 0\n")
+	} else {
+		fmt.Fprintf(&b, "discarded entries: %d\n", previewCount)
+		b.WriteString("discard preview:\n")
+		b.WriteString(preview)
+		b.WriteString("\n")
+	}
+	b.WriteString("local changes discarded\n")
+	b.WriteString("untracked files removed")
+	return b.String(), nil
+}
+
+func (s *FastgitService) forceSyncPreview(ctx context.Context) (string, int, error) {
+	status, err := s.repoStatus(ctx)
+	if err != nil {
+		return "", 0, err
+	}
+	normalized := strings.TrimSpace(status)
+	if normalized == "" || normalized == "working tree clean" {
+		return "", 0, nil
+	}
+	lines := strings.Split(normalized, "\n")
+	const limit = 20
+	if len(lines) <= limit {
+		return normalized, len(lines), nil
+	}
+	return strings.Join(lines[:limit], "\n") + fmt.Sprintf("\n... and %d more", len(lines)-limit), len(lines), nil
 }
 
 func (s *FastgitService) worktreeList(ctx context.Context) (string, error) {
@@ -800,7 +1590,7 @@ func (s *FastgitService) issueList(ctx context.Context) (string, error) {
 		if it.GetPullRequestLinks() != nil {
 			continue
 		}
-		fmt.Fprintf(&b, "#%d [%s] %s\n", it.GetNumber(), it.GetState(), it.GetTitle())
+		fmt.Fprintf(&b, "%d\t%s\t%s\t%s\n", it.GetNumber(), it.GetState(), it.GetTitle(), it.GetHTMLURL())
 	}
 	if strings.TrimSpace(b.String()) == "" {
 		return "no open issues", nil
@@ -838,6 +1628,92 @@ func (s *FastgitService) issueCreate(ctx context.Context, title, body string) (s
 		return "", err
 	}
 	return issue.GetHTMLURL(), nil
+}
+
+func (s *FastgitService) issueClose(ctx context.Context, number int) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	closed := "closed"
+	req := &github.IssueRequest{State: &closed}
+	issue, _, err := client.Issues.Edit(ctx, owner, repoName, number, req)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("issue closed: #%d %s", issue.GetNumber(), issue.GetHTMLURL()), nil
+}
+
+func (s *FastgitService) prList(ctx context.Context) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	prs, _, err := client.PullRequests.List(ctx, owner, repoName, &github.PullRequestListOptions{
+		State:       "open",
+		Sort:        "updated",
+		Direction:   "desc",
+		ListOptions: github.ListOptions{PerPage: 50},
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(prs) == 0 {
+		return "no open PRs", nil
+	}
+
+	var b strings.Builder
+	for _, pr := range prs {
+		fmt.Fprintf(
+			&b,
+			"%d\t%s\t%s\t%s\t%s\t%s\t%t\n",
+			pr.GetNumber(),
+			pr.GetState(),
+			pr.GetTitle(),
+			pr.GetHTMLURL(),
+			pr.GetBase().GetRef(),
+			pr.GetHead().GetRef(),
+			pr.GetDraft(),
+		)
+	}
+	return strings.TrimSpace(b.String()), nil
+}
+
+func (s *FastgitService) prView(ctx context.Context, number int) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	pr, _, err := client.PullRequests.Get(ctx, owner, repoName, number)
+	if err != nil {
+		return "", err
+	}
+	body := strings.TrimSpace(pr.GetBody())
+	return fmt.Sprintf(
+		"#%d [%s]\n%s\n%s\nbase: %s\nhead: %s\ndraft: %t\n\n%s",
+		pr.GetNumber(),
+		pr.GetState(),
+		pr.GetTitle(),
+		pr.GetHTMLURL(),
+		pr.GetBase().GetRef(),
+		pr.GetHead().GetRef(),
+		pr.GetDraft(),
+		body,
+	), nil
+}
+
+func (s *FastgitService) prClose(ctx context.Context, number int) (string, error) {
+	owner, repoName, client, err := s.githubClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	closed := "closed"
+	edited := &github.PullRequest{State: &closed}
+	pr, _, err := client.PullRequests.Edit(ctx, owner, repoName, number, edited)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("pr closed: #%d %s", pr.GetNumber(), pr.GetHTMLURL()), nil
 }
 
 func (s *FastgitService) prStatus(ctx context.Context) (string, error) {
@@ -991,13 +1867,17 @@ func (s *FastgitService) tagPublish(ctx context.Context, name string) (string, e
 	return fmt.Sprintf("tag created: %s", name), nil
 }
 
-func (s *FastgitService) tagPush(ctx context.Context, name string) (string, error) {
+func (s *FastgitService) tagPush(ctx context.Context, remoteName, name string) (string, error) {
 	repo, err := s.openRepo()
 	if err != nil {
 		return "", err
 	}
-	if isSSHRemoteRepo(repo) {
-		out, err := s.gitInRepo(ctx, "push", "origin", fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
+	remoteName, err = s.resolveRemoteName(repo, remoteName, "")
+	if err != nil {
+		return "", err
+	}
+	if isSSHRemote(repo, remoteName) {
+		out, err := s.gitInRepo(ctx, "push", remoteName, fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
 		if err != nil {
 			return "", err
 		}
@@ -1007,12 +1887,12 @@ func (s *FastgitService) tagPush(ctx context.Context, name string) (string, erro
 		return strings.TrimSpace(out), nil
 	}
 	refSpec := gitconfig.RefSpec(fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name))
-	clientOptions, err := s.clientOptions(repo)
+	clientOptions, err := s.clientOptionsForRemote(repo, remoteName)
 	if err != nil {
 		return "", err
 	}
 	err = repo.PushContext(ctx, &git.PushOptions{
-		RemoteName:    "origin",
+		RemoteName:    remoteName,
 		RefSpecs:      []gitconfig.RefSpec{refSpec},
 		ClientOptions: clientOptions,
 	})
@@ -1023,6 +1903,132 @@ func (s *FastgitService) tagPush(ctx context.Context, name string) (string, erro
 		return "", err
 	}
 	return fmt.Sprintf("tag pushed: %s", name), nil
+}
+
+func (s *FastgitService) tagForceSync(ctx context.Context, remoteName, name string) (string, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return "", err
+	}
+	before, err := s.localTagHash(repo, name)
+	if err != nil {
+		return "", err
+	}
+	remoteName, err = s.resolveRemoteName(repo, remoteName, "")
+	if err != nil {
+		return "", err
+	}
+
+	if isSSHRemote(repo, remoteName) {
+		if _, err := s.gitInRepo(ctx, "fetch", "--force", remoteName, fmt.Sprintf("refs/tags/%[1]s:refs/tags/%[1]s", name)); err != nil {
+			return "", err
+		}
+	} else {
+		clientOptions, err := s.clientOptionsForRemote(repo, remoteName)
+		if err != nil {
+			return "", err
+		}
+		refSpec := gitconfig.RefSpec(fmt.Sprintf("+refs/tags/%[1]s:refs/tags/%[1]s", name))
+		if err := repo.FetchContext(ctx, &git.FetchOptions{
+			RemoteName:    remoteName,
+			RefSpecs:      []gitconfig.RefSpec{refSpec},
+			Force:         true,
+			ClientOptions: clientOptions,
+		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "", err
+		}
+	}
+
+	after, err := s.localTagHash(repo, name)
+	if err != nil {
+		return "", err
+	}
+	if before == after {
+		return fmt.Sprintf("tag already aligned: %s\nhash=%s", name, shortHash(after)), nil
+	}
+
+	return fmt.Sprintf(
+		"force aligned tag: %s\nbefore=%s\nafter=%s\nlocal tag overwritten from remote",
+		name,
+		shortHash(before),
+		shortHash(after),
+	), nil
+}
+
+func (s *FastgitService) localTagHash(repo *git.Repository, name string) (string, error) {
+	if repo == nil {
+		return "", errors.New("repo is nil")
+	}
+	ref, err := repo.Reference(plumbing.NewTagReferenceName(name), true)
+	if err != nil {
+		return "", fmt.Errorf("local tag not found: %s", name)
+	}
+	return ref.Hash().String(), nil
+}
+
+func shortHash(v string) string {
+	if len(v) <= 8 {
+		return v
+	}
+	return v[:8]
+}
+
+func compareBranchCommits(localCommit, upstreamCommit *object.Commit) (syncState string, ahead, behind int, err error) {
+	if localCommit == nil || upstreamCommit == nil {
+		return "unknown", 0, 0, nil
+	}
+	if localCommit.Hash == upstreamCommit.Hash {
+		return "in-sync", 0, 0, nil
+	}
+
+	localIsAncestor, err := localCommit.IsAncestor(upstreamCommit)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	if localIsAncestor {
+		behind, err = countCommitsUntil(upstreamCommit, localCommit.Hash)
+		return "behind", 0, behind, err
+	}
+
+	upstreamIsAncestor, err := upstreamCommit.IsAncestor(localCommit)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	if upstreamIsAncestor {
+		ahead, err = countCommitsUntil(localCommit, upstreamCommit.Hash)
+		return "ahead", ahead, 0, err
+	}
+
+	bases, err := localCommit.MergeBase(upstreamCommit)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	if len(bases) == 0 {
+		return "diverged", 0, 0, nil
+	}
+
+	ahead, err = countCommitsUntil(localCommit, bases[0].Hash)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	behind, err = countCommitsUntil(upstreamCommit, bases[0].Hash)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	return "diverged", ahead, behind, nil
+}
+
+func countCommitsUntil(start *object.Commit, stop plumbing.Hash) (int, error) {
+	if start == nil {
+		return 0, nil
+	}
+	count := 0
+	iter := object.NewCommitPreorderIter(start, nil, []plumbing.Hash{stop})
+	err := iter.ForEach(func(*object.Commit) error {
+		count++
+		return nil
+	})
+	return count, err
 }
 
 func (s *FastgitService) githubClient(ctx context.Context) (owner, repoName string, client *github.Client, err error) {
@@ -1105,27 +2111,55 @@ func parseGitHubRemote(remote string) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func isSSHRemoteRepo(repo *git.Repository) bool {
+func isSSHRemote(repo *git.Repository, remoteName string) bool {
 	if repo == nil {
 		return false
 	}
-	remote, err := repo.Remote("origin")
+	remote, err := repo.Remote(remoteName)
 	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
 		return false
 	}
-	parsedURL, err := transport.ParseURL(strings.TrimSpace(remote.Config().URLs[0]))
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsedURL.Scheme, "ssh")
+	return isSSHRemoteURL(remote.Config().URLs[0])
 }
 
 func (s *FastgitService) clientOptions(repo *git.Repository) ([]client.Option, error) {
-	remote, err := repo.Remote("origin")
+	return s.clientOptionsForRemote(repo, "origin")
+}
+
+func (s *FastgitService) resolveRemoteName(repo *git.Repository, explicit, branch string) (string, error) {
+	if repo == nil {
+		return "", fmt.Errorf("repo not opened")
+	}
+	if strings.TrimSpace(explicit) != "" {
+		if _, err := repo.Remote(explicit); err != nil {
+			return "", fmt.Errorf("remote not found: %s", explicit)
+		}
+		return explicit, nil
+	}
+
+	cfg, err := repo.Storer.Config()
+	if err != nil {
+		return "", err
+	}
+	name := defaultRemoteName(cfg, branch)
+	if name == "" {
+		return "", fmt.Errorf("no remote configured")
+	}
+	if _, err := repo.Remote(name); err != nil {
+		return "", fmt.Errorf("remote not found: %s", name)
+	}
+	return name, nil
+}
+
+func (s *FastgitService) clientOptionsForRemote(repo *git.Repository, remoteName string) ([]client.Option, error) {
+	remote, err := repo.Remote(remoteName)
 	if err != nil || remote == nil || len(remote.Config().URLs) == 0 {
 		return nil, nil
 	}
-	rawURL := strings.TrimSpace(remote.Config().URLs[0])
+	return s.clientOptionsForURL(strings.TrimSpace(remote.Config().URLs[0]))
+}
+
+func (s *FastgitService) clientOptionsForURL(rawURL string) ([]client.Option, error) {
 	parsedURL, err := transport.ParseURL(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse remote URL failed: %w", err)
@@ -1147,6 +2181,132 @@ func (s *FastgitService) clientOptions(repo *git.Repository) ([]client.Option, e
 	default:
 		return nil, nil
 	}
+}
+
+func defaultRemoteFetchRefspecs(name string) []gitconfig.RefSpec {
+	return []gitconfig.RefSpec{
+		gitconfig.RefSpec(fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", name)),
+	}
+}
+
+const (
+	rawRemoteSection = "remote"
+	rawURLKey        = "url"
+	rawPushURLKey    = "pushurl"
+)
+
+func (s *FastgitService) repoConfig() (*gitconfig.Config, error) {
+	repo, err := s.openRepo()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := repo.Storer.Config()
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func (s *FastgitService) saveRepoConfig(cfg *gitconfig.Config) error {
+	repo, err := s.openRepo()
+	if err != nil {
+		return err
+	}
+	return repo.Storer.SetConfig(cfg)
+}
+
+func remoteURLsFromConfig(cfg *gitconfig.Config, name string) (fetchURL, pushURL string) {
+	if cfg == nil || cfg.Raw == nil {
+		return "", ""
+	}
+	section := cfg.Raw.Section(rawRemoteSection)
+	for _, subsection := range section.Subsections {
+		if subsection.Name != name {
+			continue
+		}
+		fetchURL = strings.TrimSpace(subsection.Option(rawURLKey))
+		pushURL = strings.TrimSpace(subsection.Option(rawPushURLKey))
+		return fetchURL, pushURL
+	}
+	return "", ""
+}
+
+func currentPushURL(cfg *gitconfig.Config, name string) string {
+	_, pushURL := remoteURLsFromConfig(cfg, name)
+	return pushURL
+}
+
+func defaultRemoteName(cfg *gitconfig.Config, branch string) string {
+	if cfg == nil {
+		return ""
+	}
+	if branch = strings.TrimSpace(branch); branch != "" {
+		if branchCfg, ok := cfg.Branches[branch]; ok && branchCfg != nil {
+			if name := strings.TrimSpace(branchCfg.Remote); name != "" {
+				return name
+			}
+		}
+	}
+	if _, ok := cfg.Remotes["origin"]; ok {
+		return "origin"
+	}
+	names := make([]string, 0, len(cfg.Remotes))
+	for name := range cfg.Remotes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func ensureRemoteRawOptions(cfg *gitconfig.Config, name, fetchURL, pushURL string) {
+	if cfg == nil {
+		return
+	}
+	if cfg.Raw == nil {
+		cfg.Raw = formatconfig.New()
+	}
+	sub := cfg.Raw.Section(rawRemoteSection).Subsection(name)
+	if strings.TrimSpace(fetchURL) != "" {
+		sub.SetOption(rawURLKey, fetchURL)
+	}
+	if strings.TrimSpace(pushURL) == "" {
+		sub.RemoveOption(rawPushURLKey)
+		return
+	}
+	sub.SetOption(rawPushURLKey, strings.TrimSpace(pushURL))
+}
+
+func renameRemoteFetchRefspecs(specs []gitconfig.RefSpec, oldName, newName string) []gitconfig.RefSpec {
+	if len(specs) == 0 {
+		return defaultRemoteFetchRefspecs(newName)
+	}
+	out := make([]gitconfig.RefSpec, 0, len(specs))
+	oldSegment := "refs/remotes/" + oldName + "/"
+	newSegment := "refs/remotes/" + newName + "/"
+	for _, spec := range specs {
+		rewritten := strings.ReplaceAll(spec.String(), oldSegment, newSegment)
+		out = append(out, gitconfig.RefSpec(rewritten))
+	}
+	return out
+}
+
+func remoteTransport(rawURL string) string {
+	parsedURL, err := transport.ParseURL(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "unknown"
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsedURL.Scheme))
+	if scheme == "" {
+		return "unknown"
+	}
+	return scheme
+}
+
+func isSSHRemoteURL(rawURL string) bool {
+	return strings.EqualFold(remoteTransport(rawURL), "ssh")
 }
 
 func buildSSHAuth(remoteURL *neturl.URL) (client.SSHAuth, error) {

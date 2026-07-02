@@ -1,2 +1,2 @@
-// Optional Wails runtime extension hook.
-// Kept intentionally minimal to avoid 404 on /wails/custom.js.
+// Reserved for Wails runtime custom hooks.
+// Keep this file even when empty so wails://localhost/wails/custom.js resolves.

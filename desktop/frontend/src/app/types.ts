@@ -52,6 +52,7 @@ export interface OperationOutput {
 }
 
 export interface ResourceCatalog {
+  remotes: OutputListItem[];
   branches: OutputListItem[];
   issues: OutputListItem[];
   tags: OutputListItem[];
@@ -62,6 +63,7 @@ export interface ResourceCatalog {
 
 export interface ProjectSettings {
   defaultBaseBranch: string;
+  defaultRemote: string;
 }
 
 export interface AppState {

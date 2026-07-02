@@ -23,6 +23,12 @@ export interface AppContextValue {
   setGitHubToken(token: string): Promise<void>;
   updateProjectSettings(patch: Partial<ProjectSettings>): void;
   runAction(module: DesktopModule, action: ModuleAction, values: ActionRunRequest["values"]): Promise<void>;
+  runBatchActions(
+    module: DesktopModule,
+    action: ModuleAction,
+    jobs: Array<{ label: string; values: ActionRunRequest["values"] }>,
+    reloadActionId?: string
+  ): Promise<void>;
   runActionAndReload(
     module: DesktopModule,
     action: ModuleAction,

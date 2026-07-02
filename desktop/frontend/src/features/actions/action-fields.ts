@@ -37,6 +37,14 @@ export function resolveActionFieldOptions(moduleID: string, actionID: string, fi
     ];
   }
 
+  if (fieldKey === "remote") {
+    return toOptions(catalog.remotes);
+  }
+
+  if (moduleID === "repo" && fieldKey === "path" && (actionID === "repo_stage_path" || actionID === "repo_unstage_path" || actionID === "repo_discard_path")) {
+    return toOptions(catalog.repoStatus);
+  }
+
   if (moduleID === "branch" && fieldKey === "name" && (actionID === "branch_checkout" || actionID === "branch_delete" || actionID === "branch_force_sync")) {
     return toOptions(
       actionID === "branch_delete"
@@ -60,16 +68,24 @@ export function resolveActionFieldOptions(moduleID: string, actionID: string, fi
     ];
   }
 
-  if (moduleID === "issue" && actionID === "issue_view" && fieldKey === "id") {
+  if (moduleID === "issue" && (actionID === "issue_view" || actionID === "issue_close") && fieldKey === "id") {
     return toOptions(catalog.issues);
   }
 
-  if (moduleID === "tag" && actionID === "tag_push" && fieldKey === "name") {
+  if (moduleID === "remote" && fieldKey === "name" && (actionID === "remote_rename" || actionID === "remote_update" || actionID === "remote_set_url" || actionID === "remote_set_push_url" || actionID === "remote_remove" || actionID === "remote_fetch")) {
+    return toOptions(catalog.remotes);
+  }
+
+  if (moduleID === "tag" && (actionID === "tag_push" || actionID === "tag_force_sync") && fieldKey === "name") {
     return toOptions(catalog.tags);
   }
 
   if (moduleID === "pr" && actionID === "pr_create" && fieldKey === "base") {
     return toOptions(catalog.branches);
+  }
+
+  if (moduleID === "pr" && (actionID === "pr_view" || actionID === "pr_close") && fieldKey === "id") {
+    return toOptions(catalog.prs);
   }
 
   return [];

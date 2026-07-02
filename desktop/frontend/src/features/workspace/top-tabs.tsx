@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
+import { Input as AntInput, Select } from "antd";
 import { Plus, Settings2, X } from "lucide-react";
 
 import { useAppContext } from "../../app/providers/app-context";
 import logoIcon from "../../assets/brand/fastgit-logo-icon.svg";
-import { RepoSwitcher } from "./repo-switcher";
+import type { ModuleAction } from "../../app/types";
+
+const RepoSwitcher = lazy(async () => {
+  const module = await import("./repo-switcher");
+  return { default: module.RepoSwitcher };
+});
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -48,6 +54,10 @@ function buildProjectLabels(paths: string[]): Map<string, string> {
   return labels;
 }
 
+function findLandingAction(actions: ModuleAction[]): ModuleAction | null {
+  return actions.find((action) => (action.id.endsWith("_list") || action.id.endsWith("_status")) && (action.fields?.length ?? 0) === 0) ?? null;
+}
+
 export function TopTabs() {
   const {
     state,
@@ -58,6 +68,7 @@ export function TopTabs() {
     reorderModuleTabs,
     setSelectedModule,
     switchRepo,
+    runAction,
   } = useAppContext();
   const projectLabels = useMemo(() => buildProjectLabels(state.repoNamespaces), [state.repoNamespaces]);
   const repoName = state.repoPath ? projectLabels.get(state.repoPath) ?? basename(state.repoPath) : "workspace";
@@ -76,6 +87,7 @@ export function TopTabs() {
     .filter((module): module is NonNullable<typeof module> => module !== undefined);
   const openedCount = openedModules.length;
   const currentBaseBranch = state.projectSettings[state.repoPath]?.defaultBaseBranch ?? "";
+  const currentDefaultRemote = state.projectSettings[state.repoPath]?.defaultRemote ?? "";
   const githubSummary = state.githubAuthStatus?.configured
     ? `GitHub 已连接 · ${state.githubAuthStatus.source === "session" ? "会话 Token" : "环境变量"}`
     : "GitHub 未连接";
@@ -89,6 +101,14 @@ export function TopTabs() {
       return repoPath.toLowerCase().includes(keyword) || label.toLowerCase().includes(keyword);
     });
   }, [projectLabels, repoQuery, state.repoNamespaces]);
+  const repoOptions = useMemo(
+    () =>
+      state.repoNamespaces.map((repoPath) => ({
+        value: repoPath,
+        label: projectLabels.get(repoPath) ?? basename(repoPath),
+      })),
+    [projectLabels, state.repoNamespaces]
+  );
 
   const menuModule = useMemo(() => {
     if (!menu) {
@@ -174,6 +194,18 @@ export function TopTabs() {
     setMenu(null);
   };
 
+  const onModuleTabSelect = (moduleId: string) => {
+    const module = openedModules.find((item) => item.id === moduleId);
+    if (!module) {
+      return;
+    }
+    setSelectedModule(module.id);
+    const landingAction = findLandingAction(module.actions);
+    if (landingAction) {
+      void runAction(module, landingAction, {});
+    }
+  };
+
   return (
     <header className="tabs-header app-drag-region">
       <div className="tabs-repo app-no-drag-region">
@@ -206,11 +238,11 @@ export function TopTabs() {
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={() => setSelectedModule(module.id)}
+              onClick={() => onModuleTabSelect(module.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setSelectedModule(module.id);
+                  onModuleTabSelect(module.id);
                 }
               }}
               onContextMenu={(event) => handleContextMenu(event, module.id)}
@@ -246,19 +278,16 @@ export function TopTabs() {
       </div>
 
       <div className="tabs-actions app-no-drag-region">
-        <select
-          className="ui-input tabs-project-select"
-          value={state.repoPath}
-          title={state.repoPath || "未选择项目"}
-          onChange={(event) => void switchRepo(event.target.value)}
-        >
-          <option value="">{state.repoNamespaces.length === 0 ? "未配置项目" : "选择项目"}</option>
-          {state.repoNamespaces.map((repoPath) => (
-            <option key={repoPath} value={repoPath}>
-              {projectLabels.get(repoPath) ?? basename(repoPath)}
-            </option>
-          ))}
-        </select>
+        <Select
+          className="tabs-project-select"
+          value={state.repoPath || undefined}
+          options={repoOptions}
+          placeholder={state.repoNamespaces.length === 0 ? "未配置项目" : "选择项目"}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          onChange={(next) => void switchRepo(String(next ?? ""))}
+        />
 
         <button
           ref={settingsButtonRef}
@@ -281,7 +310,9 @@ export function TopTabs() {
           className="tabs-settings-panel app-no-drag-region"
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <RepoSwitcher />
+          <Suspense fallback={<div className="tabs-project-panel__empty">加载设置...</div>}>
+            <RepoSwitcher />
+          </Suspense>
         </div>
       )}
 
@@ -300,6 +331,7 @@ export function TopTabs() {
             <span>{state.repoPath || "未选择项目"}</span>
             <div className="tabs-project-panel__summary-meta">
               <span>{currentBaseBranch ? `base ${currentBaseBranch}` : "未设置默认 base"}</span>
+              <span>{currentDefaultRemote ? `remote ${currentDefaultRemote}` : "未设置默认 remote"}</span>
               <span>{githubSummary}</span>
             </div>
             <div className="tabs-project-panel__summary-actions">
@@ -315,8 +347,8 @@ export function TopTabs() {
               </button>
             </div>
           </div>
-          <input
-            className="ui-input tabs-project-panel__search"
+          <AntInput
+            className="tabs-project-panel__search"
             value={repoQuery}
             onChange={(event) => setRepoQuery(event.target.value)}
             placeholder="搜索项目..."
@@ -326,6 +358,7 @@ export function TopTabs() {
             {filteredRepos.map((repoPath) => {
               const active = repoPath === state.repoPath;
               const baseBranch = state.projectSettings[repoPath]?.defaultBaseBranch ?? "";
+              const defaultRemote = state.projectSettings[repoPath]?.defaultRemote ?? "";
               return (
                 <button
                   key={repoPath}
@@ -342,6 +375,7 @@ export function TopTabs() {
                   <span className="tabs-project-item__meta">
                     {active ? "当前项目" : "切换到该项目"}
                     {baseBranch ? ` · base ${baseBranch}` : ""}
+                    {defaultRemote ? ` · remote ${defaultRemote}` : ""}
                   </span>
                 </button>
               );
