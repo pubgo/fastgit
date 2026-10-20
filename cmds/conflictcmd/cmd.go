@@ -42,7 +42,7 @@ func newSummaryCommand() *redant.Command {
 		Options: redant.OptionSet{
 			{Flag: "repo", Description: "仓库目录（默认当前目录）", Value: redant.StringOf(&repo)},
 			{Flag: "ai", Description: "使用 AI 分析冲突原因（失败时保留启发式建议）", Value: redant.BoolOf(&useAI)},
-			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
+			{Flag: "ai-provider", Description: "AI 提供方 auto|acp|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveRepoRoot(repo)

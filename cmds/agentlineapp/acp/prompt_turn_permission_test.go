@@ -46,7 +46,7 @@ func TestPromptTurnPermissionFlow(t *testing.T) {
 
 		resp, err := bridge.RequestPermission(ctx, acp.RequestPermissionRequest{
 			SessionId: sessionID,
-			ToolCall: acp.RequestPermissionToolCall{
+			ToolCall: acp.ToolCallUpdate{
 				ToolCallId: toolID,
 				Title:      acp.Ptr(title),
 				Kind:       acp.Ptr(acp.ToolKindEdit),

@@ -27,8 +27,7 @@ import (
 )
 
 type cmdParams struct {
-	OpenaiClient *utils.OpenaiClient
-	CommitCfg    []*fastcommitcmd.Config
+	CommitCfg []*fastcommitcmd.Config
 }
 
 func New() *redant.Command {

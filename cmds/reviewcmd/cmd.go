@@ -33,7 +33,7 @@ func newStagedCommand() *redant.Command {
 		Short: "对 staged diff 输出 Blockers/Suggestions/Nits",
 		Options: redant.OptionSet{
 			{Flag: "dry-run", Description: "只说明将评审的内容，不调用 AI", Value: redant.BoolOf(&dryRun)},
-			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
+			{Flag: "ai-provider", Description: "AI 提供方 auto|acp|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			diffResult := utils.GetStagedDiff(ctx).Unwrap()

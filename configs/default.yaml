@@ -8,6 +8,15 @@ commit:
   gen_version: ${FASTGIT_GEN_VERSION}
   candidates_default: false
 
+# AI 提供方选择: auto|acp|openai|copilot。auto 时优先 acp,失败依次回退 openai/copilot/规则
+ai:
+  provider: auto
+
+# ACP (agent client protocol) agent 管理,用 `ggc acp list/add/remove/set-default/test` 维护
+acp:
+  default: ""
+  agents: {}
+
 copilot:
   permission_mode: ask
 

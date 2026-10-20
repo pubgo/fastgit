@@ -13,6 +13,26 @@ import (
 
 type openAIConfigFile struct {
 	Openai *utils.OpenaiConfig `yaml:"openai"`
+	Ai     *aiConfigFile       `yaml:"ai"`
+}
+
+type aiConfigFile struct {
+	Provider string `yaml:"provider"`
+}
+
+// defaultProviderName resolves the ai.provider config value, overridden by
+// FASTGIT_AI_PROVIDER. Empty means "auto".
+func defaultProviderName() string {
+	if v := strings.TrimSpace(os.Getenv("FASTGIT_AI_PROVIDER")); v != "" {
+		return v
+	}
+	if data, err := os.ReadFile(configs.GetConfigPath()); err == nil {
+		var file openAIConfigFile
+		if err := yaml.Unmarshal(data, &file); err == nil && file.Ai != nil {
+			return strings.TrimSpace(file.Ai.Provider)
+		}
+	}
+	return "auto"
 }
 
 // OpenAIProviderFromConfig loads OpenAI settings from the fastgit config file and env.
@@ -55,16 +75,23 @@ func mergeOpenAIConfig(base, from *utils.OpenaiConfig) utils.OpenaiConfig {
 	return out
 }
 
-// ResolveProvider picks a provider chain by name: auto|openai|copilot.
+// ResolveProvider picks a provider chain by name: auto|acp|openai|copilot.
+// An empty name falls back to the configured default (FASTGIT_AI_PROVIDER or ai.provider).
 func ResolveProvider(name, workingDir string) Provider {
+	if strings.TrimSpace(name) == "" {
+		name = defaultProviderName()
+	}
 	var provider Provider
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "acp":
+		provider = NewChain(NewACP(workingDir), NewRuleFallback())
 	case "openai":
 		provider = NewChain(OpenAIProviderFromConfig(), NewRuleFallback())
 	case "copilot":
 		provider = NewCopilot(DefaultCopilotConfig(workingDir))
 	default:
 		provider = NewChain(
+			NewACP(workingDir),
 			OpenAIProviderFromConfig(),
 			NewCopilot(DefaultCopilotConfig(workingDir)),
 			NewRuleFallback(),
