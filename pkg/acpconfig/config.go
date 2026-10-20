@@ -84,11 +84,15 @@ func (c *Config) Resolve(want string) (acpclient.Agent, error) {
 		names = append(names, d)
 	}
 
+	// 显式指定过名字(flag/env/default)时,任一命中即返回;全部未命中直接报错,
+	// 不回退到自动探测,避免静默用错 agent。
 	for _, name := range names {
 		if agent, ok := c.agentByName(name); ok {
 			return agent, nil
 		}
-		return acpclient.Agent{}, fmt.Errorf("acp agent %q not found in config (acp.agents) or built-in catalog", name)
+	}
+	if len(names) > 0 {
+		return acpclient.Agent{}, fmt.Errorf("acp agent %q not found in config (acp.agents) or built-in catalog", names[0])
 	}
 
 	if len(c.Agents) == 1 {
