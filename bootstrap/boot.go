@@ -10,13 +10,13 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixcontext"
+	"github.com/pubgo/fastgit/cmds/acpcmd"
 	"github.com/pubgo/fastgit/cmds/addcmd"
 	"github.com/pubgo/fastgit/cmds/branchcmd"
 	"github.com/pubgo/fastgit/cmds/checkcmd"
 	"github.com/pubgo/fastgit/cmds/chglogcmd"
-	"github.com/pubgo/fastgit/cmds/conflictcmd"
-	"github.com/pubgo/fastgit/cmds/teamcmd"
 	"github.com/pubgo/fastgit/cmds/configcmd"
+	"github.com/pubgo/fastgit/cmds/conflictcmd"
 	"github.com/pubgo/fastgit/cmds/copilotcmd"
 	"github.com/pubgo/fastgit/cmds/diffcmd"
 	"github.com/pubgo/fastgit/cmds/docscmd"
@@ -34,8 +34,9 @@ import (
 	"github.com/pubgo/fastgit/cmds/sshcmd"
 	"github.com/pubgo/fastgit/cmds/statuscmd"
 	"github.com/pubgo/fastgit/cmds/tagcmd"
-	"github.com/pubgo/fastgit/cmds/upgradecmd"
+	"github.com/pubgo/fastgit/cmds/teamcmd"
 	"github.com/pubgo/fastgit/cmds/uicmd"
+	"github.com/pubgo/fastgit/cmds/upgradecmd"
 	"github.com/pubgo/fastgit/cmds/versioncmd"
 	"github.com/pubgo/fastgit/cmds/worktreecmd"
 	"github.com/pubgo/fastgit/pkg/aiprovider"
@@ -55,6 +56,7 @@ func Main() {
 		initcmd.New(),
 		upgradecmd.New(),
 		statuscmd.New(),
+		acpcmd.New(),
 		addcmd.New(),
 		logcmd.New(),
 		diffcmd.New(),

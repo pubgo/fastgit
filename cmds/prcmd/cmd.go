@@ -47,7 +47,7 @@ func newCreateCommand() *redant.Command {
 			{Flag: "repo", Description: "仓库目录（默认当前目录）", Value: redant.StringOf(&repo)},
 			{Flag: "ai", Description: "使用 AI 润色 PR 标题与正文（失败时保留规则版）", Value: redant.BoolOf(&useAI)},
 			{Flag: "review", Description: "将本地 code review 摘要写入 Test plan", Value: redant.BoolOf(&useReview)},
-			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
+			{Flag: "ai-provider", Description: "AI 提供方 auto|acp|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveRepoRoot(repo)
@@ -185,7 +185,7 @@ func newSyncCommand() *redant.Command {
 			{Flag: "update-body", Description: "sync 后根据最新 diff 更新 PR 标题与正文", Value: redant.BoolOf(&updateBody)},
 			{Flag: "ai", Description: "更新 PR 正文时使用 AI 润色", Value: redant.BoolOf(&useAI)},
 			{Flag: "review", Description: "更新 PR 时将本地 review 摘要写入 Test plan", Value: redant.BoolOf(&useReview)},
-			{Flag: "ai-provider", Description: "AI 提供方 auto|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
+			{Flag: "ai-provider", Description: "AI 提供方 auto|acp|openai|copilot", Value: redant.StringOf(&aiProvider), Default: "auto"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveRepoRoot(repo)

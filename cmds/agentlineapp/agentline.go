@@ -248,39 +248,39 @@ func stripPromptArg(args []string, promptFlag string) []string {
 }
 
 type agentlineModel struct {
-	ctx              context.Context
-	root             *redant.Command
-	input            textinput.Model
-	prompt           string
-	mode             interactionMode
-	sessionCWD       string
-	sessionGitBranch string
-	sessionGitDirty  bool
-	stickyInvocation *stickyInvocation
-	history          []string
-	historyPos       int
-	historyFile      string
-	persistHistory   bool
-	blocks           []sessionBlock
-	suggestions      []completionItem
-	selected         int
-	running          bool
-	width            int
-	height           int
-	outputOffset     int
-	outputFocus      bool
-	inputOffset      int
-	selectedHistory  int
-	foldDetails      bool
-	currentCancel    context.CancelFunc
-	initialArgv      []string
-	agentOnlyMode    bool
+	ctx               context.Context
+	root              *redant.Command
+	input             textinput.Model
+	prompt            string
+	mode              interactionMode
+	sessionCWD        string
+	sessionGitBranch  string
+	sessionGitDirty   bool
+	stickyInvocation  *stickyInvocation
+	history           []string
+	historyPos        int
+	historyFile       string
+	persistHistory    bool
+	blocks            []sessionBlock
+	suggestions       []completionItem
+	selected          int
+	running           bool
+	width             int
+	height            int
+	outputOffset      int
+	outputFocus       bool
+	inputOffset       int
+	selectedHistory   int
+	foldDetails       bool
+	currentCancel     context.CancelFunc
+	initialArgv       []string
+	agentOnlyMode     bool
 	permissionBroker  *agentacp.PermissionBroker
 	copilotPermBroker *copilotperm.Broker
 	permissionMode    copilotperm.Mode
 	questionBroker    *QuestionBroker
-	acpEventSeq      int64
-	acpEventEntries  []acpEventEntry
+	acpEventSeq       int64
+	acpEventEntries   []acpEventEntry
 }
 
 type runResultMsg struct {
@@ -322,22 +322,22 @@ func newAgentlineModel(ctx context.Context, root *redant.Command, prompt string,
 	}
 
 	m := &agentlineModel{
-		ctx:              ctx,
-		root:             root,
-		input:            ti,
-		prompt:           prompt,
-		mode:             interactionModeCommand,
-		sessionCWD:       sessionCWD,
-		sessionGitBranch: sessionGitBranch,
-		sessionGitDirty:  sessionGitDirty,
-		history:          append([]string(nil), history...),
-		historyPos:       len(history),
-		historyFile:      historyFile,
-		persistHistory:   persist,
-		selectedHistory:  -1,
-		initialArgv:      append([]string(nil), initialArgv...),
-		agentOnlyMode:    agentOnlyMode,
-		permissionBroker: agentacp.NewPermissionBroker(),
+		ctx:               ctx,
+		root:              root,
+		input:             ti,
+		prompt:            prompt,
+		mode:              interactionModeCommand,
+		sessionCWD:        sessionCWD,
+		sessionGitBranch:  sessionGitBranch,
+		sessionGitDirty:   sessionGitDirty,
+		history:           append([]string(nil), history...),
+		historyPos:        len(history),
+		historyFile:       historyFile,
+		persistHistory:    persist,
+		selectedHistory:   -1,
+		initialArgv:       append([]string(nil), initialArgv...),
+		agentOnlyMode:     agentOnlyMode,
+		permissionBroker:  agentacp.NewPermissionBroker(),
 		copilotPermBroker: copilotperm.NewBroker(),
 		permissionMode:    permissionMode,
 		questionBroker:    NewQuestionBroker(),
@@ -1501,7 +1501,7 @@ func runACPDemoTurnCmd(ctx context.Context, prompt string, broker *agentacp.Perm
 
 			resp, err := bridge.RequestPermission(ctx, acp.RequestPermissionRequest{
 				SessionId: sessionID,
-				ToolCall: acp.RequestPermissionToolCall{
+				ToolCall: acp.ToolCallUpdate{
 					ToolCallId: toolID,
 					Title:      acp.Ptr(title),
 					Kind:       acp.Ptr(acp.ToolKindEdit),

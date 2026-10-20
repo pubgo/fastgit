@@ -19,7 +19,7 @@ type CallbackClient struct {
 	OnRequestPermission func(ctx context.Context, params acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error)
 	OnSessionUpdate     func(ctx context.Context, params acp.SessionNotification) error
 	OnCreateTerminal    func(ctx context.Context, params acp.CreateTerminalRequest) (acp.CreateTerminalResponse, error)
-	OnKillTerminal      func(ctx context.Context, params acp.KillTerminalCommandRequest) (acp.KillTerminalCommandResponse, error)
+	OnKillTerminal      func(ctx context.Context, params acp.KillTerminalRequest) (acp.KillTerminalResponse, error)
 	OnTerminalOutput    func(ctx context.Context, params acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error)
 	OnReleaseTerminal   func(ctx context.Context, params acp.ReleaseTerminalRequest) (acp.ReleaseTerminalResponse, error)
 	OnWaitTerminalExit  func(ctx context.Context, params acp.WaitForTerminalExitRequest) (acp.WaitForTerminalExitResponse, error)
@@ -64,11 +64,11 @@ func (c *CallbackClient) CreateTerminal(ctx context.Context, params acp.CreateTe
 	return acp.CreateTerminalResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalCreate)
 }
 
-func (c *CallbackClient) KillTerminalCommand(ctx context.Context, params acp.KillTerminalCommandRequest) (acp.KillTerminalCommandResponse, error) {
+func (c *CallbackClient) KillTerminalCommand(ctx context.Context, params acp.KillTerminalRequest) (acp.KillTerminalResponse, error) {
 	if c != nil && c.OnKillTerminal != nil {
 		return c.OnKillTerminal(ctx, params)
 	}
-	return acp.KillTerminalCommandResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalKill)
+	return acp.KillTerminalResponse{}, acp.NewMethodNotFound(acp.ClientMethodTerminalKill)
 }
 
 func (c *CallbackClient) TerminalOutput(ctx context.Context, params acp.TerminalOutputRequest) (acp.TerminalOutputResponse, error) {

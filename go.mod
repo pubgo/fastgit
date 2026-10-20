@@ -22,7 +22,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/cheggaaa/pb/v3 v3.1.7
-	github.com/coder/acp-go-sdk v0.6.3
+	github.com/coder/acp-go-sdk v0.13.5
 	github.com/creack/pty v1.1.24
 	github.com/dave/jennifer v1.7.1
 	github.com/deckarep/golang-set/v2 v2.8.0

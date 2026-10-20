@@ -18,7 +18,7 @@ func TestHandleSlashInput_PermissionsList(t *testing.T) {
 	go func() {
 		resp, _ := m.permissionBroker.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 			SessionId: "sess_1",
-			ToolCall:  acp.RequestPermissionToolCall{ToolCallId: "call_1", Title: acp.Ptr("edit file")},
+			ToolCall:  acp.ToolCallUpdate{ToolCallId: "call_1", Title: acp.Ptr("edit file")},
 			Options:   []acp.PermissionOption{{OptionId: "allow-once", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce}},
 		})
 		respCh <- resp
@@ -60,7 +60,7 @@ func TestHandleSlashInput_AllowResolvesRequest(t *testing.T) {
 	go func() {
 		resp, _ := m.permissionBroker.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 			SessionId: "sess_1",
-			ToolCall:  acp.RequestPermissionToolCall{ToolCallId: "call_1"},
+			ToolCall:  acp.ToolCallUpdate{ToolCallId: "call_1"},
 			Options:   []acp.PermissionOption{{OptionId: "allow-once", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce}},
 		})
 		respCh <- resp
@@ -96,7 +96,7 @@ func TestHandleSlashInput_DenyResolvesRequest(t *testing.T) {
 	go func() {
 		resp, _ := m.permissionBroker.RequestPermission(context.Background(), acp.RequestPermissionRequest{
 			SessionId: "sess_1",
-			ToolCall:  acp.RequestPermissionToolCall{ToolCallId: "call_1"},
+			ToolCall:  acp.ToolCallUpdate{ToolCallId: "call_1"},
 			Options:   []acp.PermissionOption{{OptionId: "reject-once", Name: "Reject once", Kind: acp.PermissionOptionKindRejectOnce}},
 		})
 		respCh <- resp
