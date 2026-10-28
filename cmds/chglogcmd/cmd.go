@@ -87,11 +87,16 @@ func newDraftCommand() *redant.Command {
 		streaming       bool
 		autoUserAnswer  string
 		permissionMode  string
+		provider        string
+		acpAgent        string
+		acpPermit       string
+		acpTimeout      string
+		acpClientFS     bool
 	)
 
 	return &redant.Command{
 		Use:   "draft",
-		Short: "使用 Copilot 根据当前改动更新 Unreleased.md",
+		Short: "根据当前改动更新 Unreleased.md(默认 acp agent 模式,可 --provider copilot)",
 		Options: redant.OptionSet{
 			{Flag: "repo", Description: "目标仓库目录（默认当前目录）", Value: redant.StringOf(&repoPath)},
 			{Flag: "base", Description: "diff 基线（默认自动探测）", Value: redant.StringOf(&baseRef)},
@@ -106,6 +111,11 @@ func newDraftCommand() *redant.Command {
 			{Flag: "stream", Description: "启用流式输出", Value: redant.BoolOf(&streaming), Default: "false"},
 			{Flag: "auto-user-answer", Description: "ask_user 触发时自动回答内容", Value: redant.StringOf(&autoUserAnswer), Default: "继续执行"},
 			{Flag: "permission-mode", Description: "Copilot 权限策略 ask|allow|deny（默认 deny；可被 config/env 覆盖）", Value: redant.StringOf(&permissionMode)},
+			{Flag: "provider", Description: "draft 执行方式 acp|copilot（默认 acp agent 模式）", Value: redant.StringOf(&provider), Default: "acp"},
+			{Flag: "agent", Description: "acp agent 名（默认按 acp.default/自动探测）", Value: redant.StringOf(&acpAgent)},
+			{Flag: "acp-permit", Description: "acp 权限策略 ask|auto|deny", Value: redant.StringOf(&acpPermit), Default: "ask"},
+			{Flag: "acp-timeout", Description: "acp 整轮超时秒数", Value: redant.StringOf(&acpTimeout), Default: "300"},
+			{Flag: "acp-client-fs", Description: "声明 client 侧 fs 读写能力（沙箱限定仓库目录，claude 类 agent 依赖此通道落盘）", Value: redant.BoolOf(&acpClientFS), Default: "true"},
 		},
 		Handler: func(ctx context.Context, inv *redant.Invocation) error {
 			repoRoot, err := resolveExistingGitRepo(strings.TrimSpace(repoPath))
@@ -153,33 +163,45 @@ func newDraftCommand() *redant.Command {
 				return nil
 			}
 
-			mode, err := copilotperm.ResolveMode(strings.TrimSpace(permissionMode), copilotperm.ModeDeny)
-			if err != nil {
-				return err
-			}
+			switch strings.ToLower(strings.TrimSpace(provider)) {
+			case "copilot":
+				mode, err := copilotperm.ResolveMode(strings.TrimSpace(permissionMode), copilotperm.ModeDeny)
+				if err != nil {
+					return err
+				}
 
-			return runDraftWithCopilot(ctx, inv, prompt, draftCopilotOptions{
-				CLIPath:         strings.TrimSpace(cliPath),
-				LogLevel:        strings.TrimSpace(logLevel),
-				WorkingDir:      repoRoot,
-				GitHubToken:     strings.TrimSpace(githubToken),
-				UseLoggedInUser: useLoggedInUser,
-				Model:           strings.TrimSpace(model),
-				ReasoningEffort: strings.TrimSpace(reasoningEffort),
-				Streaming:       streaming,
-				AutoUserAnswer:  strings.TrimSpace(autoUserAnswer),
-				PermissionMode:  string(mode),
-			})
+				return runDraftWithCopilot(ctx, inv, prompt, draftCopilotOptions{
+					CLIPath:         strings.TrimSpace(cliPath),
+					LogLevel:        strings.TrimSpace(logLevel),
+					WorkingDir:      repoRoot,
+					GitHubToken:     strings.TrimSpace(githubToken),
+					UseLoggedInUser: useLoggedInUser,
+					Model:           strings.TrimSpace(model),
+					ReasoningEffort: strings.TrimSpace(reasoningEffort),
+					Streaming:       streaming,
+					AutoUserAnswer:  strings.TrimSpace(autoUserAnswer),
+					PermissionMode:  string(mode),
+				})
+			case "", "acp":
+				return runDraftWithAgent(ctx, inv, prompt, repoRoot, agentParams{
+					Agent:    strings.TrimSpace(acpAgent),
+					Permit:   strings.TrimSpace(acpPermit),
+					Timeout:  strings.TrimSpace(acpTimeout),
+					ClientFS: acpClientFS,
+				})
+			default:
+				return fmt.Errorf("invalid --provider %q, want acp|copilot", provider)
+			}
 		},
 	}
 }
 
 func newReleaseCommand() *redant.Command {
 	var (
-		repoPath    string
-		version     string
-		nextVersion string
-		bump        string
+		repoPath      string
+		version       string
+		nextVersion   string
+		bump          string
 		dryRun        bool
 		skipValidate  bool
 		skipBumpCheck bool

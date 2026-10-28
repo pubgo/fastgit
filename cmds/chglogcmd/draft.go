@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 
+	acp "github.com/coder/acp-go-sdk"
+
+	"github.com/pubgo/fastgit/pkg/acpclient"
+	"github.com/pubgo/fastgit/pkg/acpconfig"
+	"github.com/pubgo/fastgit/pkg/acpui"
 	"github.com/pubgo/fastgit/pkg/aiprovider"
 	"github.com/pubgo/fastgit/pkg/copilotperm"
 	"github.com/pubgo/redant"
@@ -140,6 +147,73 @@ func runDraftWithCopilot(ctx context.Context, inv *redant.Invocation, prompt str
 		return err
 	}
 	_, _ = fmt.Fprintln(inv.Stdout, "draft completed: .version/changelog/Unreleased.md")
+	return nil
+}
+
+// agentParams 是 acp agent 模式 draft 的运行参数。
+type agentParams struct {
+	Agent    string
+	Permit   string
+	Timeout  string
+	ClientFS bool
+}
+
+// runDraftWithAgent 用 ACP agent(agent 模式)执行 draft:agent 在自己的
+// 会话里读 git log/diff 并把结果写回 Unreleased.md(client fs 沙箱限定仓库目录)。
+func runDraftWithAgent(ctx context.Context, inv *redant.Invocation, prompt, repoRoot string, params agentParams) error {
+	cfg, err := acpconfig.Load()
+	if err != nil {
+		return err
+	}
+	agent, err := cfg.Resolve(params.Agent)
+	if err != nil {
+		return err
+	}
+	onPermission, err := acpui.Permission(params.Permit)
+	if err != nil {
+		return err
+	}
+
+	timeout := 5 * time.Minute
+	if secs, convErr := strconv.Atoi(params.Timeout); convErr == nil && secs > 0 {
+		timeout = time.Duration(secs) * time.Second
+	}
+
+	_, _ = fmt.Fprintf(inv.Stdout, "→ drafting changelog with acp agent %q (permit=%s timeout=%s)\n", agent.Name, defaultString(params.Permit, "ask"), timeout)
+
+	result, err := acpclient.Run(ctx, agent, acpclient.Options{
+		Cwd:          repoRoot,
+		Prompt:       prompt,
+		Timeout:      timeout,
+		OnPermission: onPermission,
+		ClientFS:     params.ClientFS,
+		OnUpdate: func(update acp.SessionUpdate) error {
+			if line := acpclient.UpdateLine(update); line != "" {
+				_, _ = fmt.Fprintln(inv.Stdout, line)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	paths := buildPaths(repoRoot)
+	_, _ = fmt.Fprintf(inv.Stdout, "agent summary:\n%s\n", strings.TrimSpace(result.Text))
+
+	if status, statusErr := gitOutput(ctx, repoRoot, "status", "--porcelain", "--", paths.UnreleasedFile); statusErr == nil {
+		if strings.TrimSpace(status) != "" {
+			_, _ = fmt.Fprintln(inv.Stdout, "draft updated: .version/changelog/Unreleased.md（review: git diff -- .version/changelog/Unreleased.md）")
+		} else {
+			_, _ = fmt.Fprintln(inv.Stdout, "warning: Unreleased.md 未被 agent 改动，请检查 agent 输出或改用 --provider copilot")
+		}
+	}
+
+	if data, readErr := os.ReadFile(paths.UnreleasedFile); readErr == nil {
+		if validateErr := ValidateReleaseReadiness(string(data)); validateErr != nil {
+			_, _ = fmt.Fprintf(inv.Stdout, "note: %v\n", validateErr)
+		}
+	}
 	return nil
 }
 
