@@ -4,7 +4,9 @@
 
 ## 新增
 
-暂无
+- 新增 `ggc acp run`：以 agent 模式执行单轮 prompt（`--agent` / `--permit ask|auto|deny` / `--timeout` / `--client-fs`）
+- 新增 ACP client 侧沙箱 FS（`fs/read_text_file` / `fs/write_text_file`），路径限定在 Cwd 内，越界拒绝
+- 新增 ACP 权限策略 ask|auto|deny（交互确认 / 自动放行 / 自动拒绝）及 session/update 进度行渲染
 
 ## 修复
 
@@ -12,7 +14,8 @@
 
 ## 变更
 
-暂无
+- `ggc changelog draft` 默认改走 ACP agent 模式（`--provider acp`；可用 `--provider copilot` 回退旧会话），并在结束后校验 Unreleased.md 是否被改动
+- ACP agent 解析改为显式名（flag / `FASTGIT_ACP_AGENT` / `acp.default`）未命中时立即失败，不再静默回退到其它候选
 
 ## 文档
 
@@ -20,12 +23,17 @@
 
 ## 影响范围
 
-暂无
+- `ggc changelog draft` 默认依赖可用 ACP agent，并默认开启 client FS（沙箱限定仓库目录）
+- `ggc acp run` 与 draft 共用权限策略与沙箱 FS 能力
+- 显式指定不存在的 agent 名会直接报错，不再自动探测其它 agent
 
 ## 验证建议
 
-暂无
+- `ggc acp run "ping" --agent <name> --permit ask` 验证连通与权限交互
+- `ggc changelog draft` 确认 `.version/changelog/Unreleased.md` 被更新；再用 `--provider copilot` 验证旧路径
+- `go test ./pkg/acpclient ./pkg/acpui ./cmds/chglogcmd` 覆盖 FS 沙箱、权限策略与 draft agent 模式
 
 ## 回滚建议
 
-暂无
+- draft 使用 `--provider copilot` 恢复旧 Copilot 会话路径
+- 代码层回退本次提交（`feat(chglog): run changelog draft through ACP agents by default`）
