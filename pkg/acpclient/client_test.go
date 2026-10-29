@@ -3,6 +3,7 @@ package acpclient
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +81,57 @@ func (a *fakeAgent) Prompt(ctx context.Context, params acp.PromptRequest) (acp.P
 		case <-time.After(30 * time.Second):
 			return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
 		}
+	case "fs-write":
+		if _, err := a.conn.WriteTextFile(ctx, acp.WriteTextFileRequest{
+			SessionId: params.SessionId, Path: "out.txt", Content: "hello fs",
+		}); err != nil {
+			return acp.PromptResponse{}, err
+		}
+		if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{
+			SessionId: params.SessionId,
+			Update:    acp.UpdateAgentMessageText("wrote out.txt"),
+		}); err != nil {
+			return acp.PromptResponse{}, err
+		}
+		return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
+	case "fs-escape":
+		_, err := a.conn.WriteTextFile(ctx, acp.WriteTextFileRequest{
+			SessionId: params.SessionId, Path: "../escape.txt", Content: "nope",
+		})
+		text := "sandbox-error"
+		if err == nil {
+			text = "sandbox-bypassed"
+		}
+		if e := a.conn.SessionUpdate(ctx, acp.SessionNotification{
+			SessionId: params.SessionId,
+			Update:    acp.UpdateAgentMessageText(text),
+		}); e != nil {
+			return acp.PromptResponse{}, e
+		}
+		return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
+	case "ask-allow":
+		resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{
+			SessionId: params.SessionId,
+			ToolCall:  acp.ToolCallUpdate{ToolCallId: "t1", Title: acp.Ptr("edit Unreleased.md")},
+			Options: []acp.PermissionOption{
+				{OptionId: "al", Name: "Always allow", Kind: acp.PermissionOptionKindAllowAlways},
+				{OptionId: "on", Name: "Allow once", Kind: acp.PermissionOptionKindAllowOnce},
+			},
+		})
+		if err != nil {
+			return acp.PromptResponse{}, err
+		}
+		text := "cancelled"
+		if resp.Outcome.Selected != nil {
+			text = "selected:" + string(resp.Outcome.Selected.OptionId)
+		}
+		if e := a.conn.SessionUpdate(ctx, acp.SessionNotification{
+			SessionId: params.SessionId,
+			Update:    acp.UpdateAgentMessageText(text),
+		}); e != nil {
+			return acp.PromptResponse{}, e
+		}
+		return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil
 	default: // reply
 		text := a.reply
 		if text == "" {
@@ -175,6 +227,66 @@ func TestRunEmptyCommand(t *testing.T) {
 	_, err := Run(context.Background(), Agent{Name: "empty"}, Options{Prompt: "hi"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "command is empty")
+}
+
+func TestRunClientFSWriteSandboxed(t *testing.T) {
+	dir := t.TempDir()
+	agent := newFakeAgent("fs-write", "")
+	result, err := Run(context.Background(), agent, Options{Prompt: "write", Cwd: dir, ClientFS: true, Timeout: 60 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, "wrote out.txt", result.Text)
+
+	data, err := os.ReadFile(filepath.Join(dir, "out.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "hello fs", string(data))
+}
+
+func TestRunClientFSEscapeDenied(t *testing.T) {
+	dir := t.TempDir()
+	agent := newFakeAgent("fs-escape", "")
+	result, err := Run(context.Background(), agent, Options{Prompt: "escape", Cwd: dir, ClientFS: true, Timeout: 60 * time.Second})
+	require.NoError(t, err)
+	require.Equal(t, "sandbox-error", result.Text)
+	require.NoFileExists(t, filepath.Join(filepath.Dir(dir), "escape.txt"))
+}
+
+func TestRunClientFSNotAdvertised(t *testing.T) {
+	dir := t.TempDir()
+	agent := newFakeAgent("fs-write", "")
+	_, err := Run(context.Background(), agent, Options{Prompt: "write", Cwd: dir, Timeout: 60 * time.Second})
+	require.Error(t, err) // agent got method-not-found and failed the prompt
+}
+
+func TestRunPermissionAllowOnce(t *testing.T) {
+	agent := newFakeAgent("ask-allow", "")
+	result, err := Run(context.Background(), agent, Options{
+		Prompt:       "edit it",
+		Timeout:      60 * time.Second,
+		OnPermission: PermissionAllowOnce,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "selected:on", result.Text) // allow_once preferred over allow_always
+}
+
+func TestRunPermissionInteractiveDeny(t *testing.T) {
+	agent := newFakeAgent("ask-allow", "")
+	result, err := Run(context.Background(), agent, Options{
+		Prompt:  "edit it",
+		Timeout: 60 * time.Second,
+		OnPermission: PermissionInteractive(func(title string, options []acp.PermissionOption) string {
+			require.Equal(t, "edit Unreleased.md", title)
+			return "" // reject
+		}),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cancelled", result.Text)
+}
+
+func TestPermissionAllowOnceNoAllowOption(t *testing.T) {
+	_, err := PermissionAllowOnce(context.Background(), acp.RequestPermissionRequest{
+		Options: []acp.PermissionOption{{OptionId: "no", Name: "No", Kind: acp.PermissionOptionKindRejectOnce}},
+	})
+	require.NoError(t, err)
 }
 
 func TestBuildPrompt(t *testing.T) {

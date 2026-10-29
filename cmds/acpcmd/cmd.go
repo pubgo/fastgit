@@ -3,24 +3,43 @@ package acpcmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	acp "github.com/coder/acp-go-sdk"
+
 	"github.com/pubgo/fastgit/configs"
 	"github.com/pubgo/fastgit/pkg/acpclient"
 	"github.com/pubgo/fastgit/pkg/acpconfig"
+	"github.com/pubgo/fastgit/pkg/acpui"
 	"github.com/pubgo/redant"
 	"github.com/samber/lo"
 )
 
 type flagOptions struct {
-	command string
-	args    string
-	env     string
-	prompt  string
-	timeout string
-	clear   bool
+	command  string
+	args     string
+	env      string
+	prompt   string
+	timeout  string
+	agent    string
+	permit   string
+	clientFS bool
+	clear    bool
+}
+
+// permissionHandler 按策略名构造权限回调: ask|auto|deny。
+func permissionHandler(mode string) (acpclient.PermissionHandler, error) {
+	return acpui.Permission(mode)
+}
+
+func runTimeout(seconds string) time.Duration {
+	if secs, err := strconv.Atoi(strings.TrimSpace(seconds)); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return acpclient.DefaultTimeout
 }
 
 func parseAgentFlags(flags *flagOptions) (acpconfig.AgentConfig, error) {
@@ -159,6 +178,58 @@ func New() *redant.Command {
 				},
 			},
 			{
+				Use:   "run",
+				Short: "run one agent-mode prompt through an acp agent: run <prompt...> [--agent name] [--permit ask|auto|deny] [--timeout s] [--client-fs]",
+				Options: []redant.Option{
+					{Flag: "agent", Description: "acp agent 名(默认按 acp.default/自动探测)", Value: redant.StringOf(&flags.agent)},
+					{Flag: "permit", Description: "权限策略 ask|auto|deny", Value: redant.StringOf(&flags.permit), Default: "ask"},
+					{Flag: "timeout", Description: "整轮超时秒数", Value: redant.StringOf(&flags.timeout), Default: "300"},
+					{Flag: "client-fs", Description: "声明并处理 client 侧 fs 读写(沙箱限定当前目录)", Value: redant.BoolOf(&flags.clientFS)},
+				},
+				Handler: func(ctx context.Context, i *redant.Invocation) error {
+					parts := make([]string, 0, len(i.Command.Args))
+					for _, arg := range i.Command.Args {
+						parts = append(parts, arg.Value.String())
+					}
+					prompt := strings.TrimSpace(strings.Join(parts, " "))
+					if prompt == "" {
+						return fmt.Errorf("usage: ggc acp run <prompt...>")
+					}
+
+					cfg, err := acpconfig.Load()
+					if err != nil {
+						return err
+					}
+					agent, err := cfg.Resolve(strings.TrimSpace(flags.agent))
+					if err != nil {
+						return err
+					}
+					onPermission, err := permissionHandler(flags.permit)
+					if err != nil {
+						return err
+					}
+
+					fmt.Printf("→ acp run agent=%q permit=%s timeout=%s\n", agent.Name, strings.ToLower(strings.TrimSpace(flags.permit)), runTimeout(flags.timeout))
+					result, err := acpclient.Run(ctx, agent, acpclient.Options{
+						Prompt:       prompt,
+						Timeout:      runTimeout(flags.timeout),
+						OnPermission: onPermission,
+						ClientFS:     flags.clientFS,
+						OnUpdate: func(update acp.SessionUpdate) error {
+							if line := acpclient.UpdateLine(update); line != "" {
+								fmt.Fprintln(os.Stderr, line)
+							}
+							return nil
+						},
+					})
+					if err != nil {
+						return err
+					}
+					fmt.Println(result.Text)
+					return nil
+				},
+			},
+			{
 				Use:   "test",
 				Short: "spawn the agent, initialize an ACP session and run a ping prompt",
 				Options: []redant.Option{
@@ -180,10 +251,7 @@ func New() *redant.Command {
 						return err
 					}
 
-					timeout := acpclient.DefaultTimeout
-					if secs, convErr := strconv.Atoi(strings.TrimSpace(flags.timeout)); convErr == nil && secs > 0 {
-						timeout = time.Duration(secs) * time.Second
-					}
+					timeout := runTimeout(flags.timeout)
 
 					fmt.Printf("→ testing acp agent %q: %s (timeout %s)\n", agent.Name, agent.Command+" "+strings.Join(agent.Args, " "), timeout)
 					start := time.Now()

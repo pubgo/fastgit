@@ -69,30 +69,23 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Resolve picks the agent to use. Precedence: explicit name (want), then
-// FASTGIT_ACP_AGENT env, then config default, then the only configured agent,
-// then an installed catalog agent.
+// Resolve picks the agent to use. Explicit selections fail fast: the want
+// argument, then FASTGIT_ACP_AGENT, then acp.default must resolve if set.
+// With nothing configured it falls back to the only configured agent, then to
+// auto-detecting an installed catalog agent.
 func (c *Config) Resolve(want string) (acpclient.Agent, error) {
-	names := []string{}
-	if w := strings.TrimSpace(want); w != "" {
-		names = append(names, w)
-	}
-	if e := strings.TrimSpace(os.Getenv(EnvAgentVar)); e != "" {
-		names = append(names, e)
-	}
-	if d := strings.TrimSpace(c.Default); d != "" {
-		names = append(names, d)
-	}
-
-	// 显式指定过名字(flag/env/default)时,任一命中即返回;全部未命中直接报错,
-	// 不回退到自动探测,避免静默用错 agent。
-	for _, name := range names {
-		if agent, ok := c.agentByName(name); ok {
+	for _, explicit := range []string{
+		strings.TrimSpace(want),
+		strings.TrimSpace(os.Getenv(EnvAgentVar)),
+		strings.TrimSpace(c.Default),
+	} {
+		if explicit == "" {
+			continue
+		}
+		if agent, ok := c.agentByName(explicit); ok {
 			return agent, nil
 		}
-	}
-	if len(names) > 0 {
-		return acpclient.Agent{}, fmt.Errorf("acp agent %q not found in config (acp.agents) or built-in catalog", names[0])
+		return acpclient.Agent{}, fmt.Errorf("acp agent %q not found in config (acp.agents) or built-in catalog", explicit)
 	}
 
 	if len(c.Agents) == 1 {
@@ -108,10 +101,7 @@ func (c *Config) Resolve(want string) (acpclient.Agent, error) {
 		}
 	}
 
-	if len(names) == 0 && len(c.Agents) == 0 {
-		return acpclient.Agent{}, fmt.Errorf("no acp agent configured; run `ggc acp add <name>` or set acp.default in %s", ConfigPathFn())
-	}
-	return acpclient.Agent{}, fmt.Errorf("no usable acp agent found; run `ggc acp list` to see candidates")
+	return acpclient.Agent{}, fmt.Errorf("no usable acp agent found; run `ggc acp add <name>` or set acp.default in %s (see `ggc acp list`)", ConfigPathFn())
 }
 
 func (c *Config) agentByName(name string) (acpclient.Agent, bool) {

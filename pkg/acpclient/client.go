@@ -35,6 +35,11 @@ type Options struct {
 	Timeout time.Duration
 	// OnUpdate 可选,收到每个 session/update 时回调。
 	OnUpdate func(update acp.SessionUpdate) error
+	// OnPermission 可选,nil 表示自动拒绝 agent 的权限请求(只读场景)。
+	OnPermission PermissionHandler
+	// ClientFS 为 true 时声明并处理 fs/read_text_file、fs/write_text_file,
+	// 路径沙箱限定在 Cwd 内。
+	ClientFS bool
 }
 
 // Result 是一次 prompt 轮次的输出。
@@ -46,27 +51,38 @@ type Result struct {
 // DefaultTimeout 是单轮 prompt 的默认上限。
 const DefaultTimeout = 2 * time.Minute
 
-// AgentName implements acp.Client, collecting agent_message chunks.
+// collector implements acp.Client, collecting agent_message chunks.
 type collector struct {
-	mu       sync.Mutex
-	text     strings.Builder
-	denials  []string
-	onUpdate func(update acp.SessionUpdate) error
+	mu           sync.Mutex
+	text         strings.Builder
+	denials      []string
+	onUpdate     func(update acp.SessionUpdate) error
+	onPermission PermissionHandler
+	fs           *fsHandler
 }
 
 var _ acp.Client = (*collector)(nil)
 
 func (c *collector) ReadTextFile(ctx context.Context, params acp.ReadTextFileRequest) (acp.ReadTextFileResponse, error) {
+	if c != nil && c.fs != nil {
+		return c.fs.read(params)
+	}
 	return acp.ReadTextFileResponse{}, acp.NewMethodNotFound(acp.ClientMethodFsReadTextFile)
 }
 
 func (c *collector) WriteTextFile(ctx context.Context, params acp.WriteTextFileRequest) (acp.WriteTextFileResponse, error) {
+	if c != nil && c.fs != nil {
+		return c.fs.write(params)
+	}
 	return acp.WriteTextFileResponse{}, acp.NewMethodNotFound(acp.ClientMethodFsWriteTextFile)
 }
 
-// RequestPermission 自动拒绝:commit 生成场景把所有上下文直接放进 prompt,
-// 正常不应触发权限请求;一旦触发说明 agent 想做额外操作,直接 cancel。
+// RequestPermission 默认自动拒绝:commit 生成等只读场景把所有上下文直接放进
+// prompt,不应触发权限请求;配置了 OnPermission 时交由策略决定(agent 模式)。
 func (c *collector) RequestPermission(ctx context.Context, params acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error) {
+	if c != nil && c.onPermission != nil {
+		return c.onPermission(ctx, params)
+	}
 	title := ""
 	if params.ToolCall.Title != nil {
 		title = strings.TrimSpace(*params.ToolCall.Title)
@@ -170,13 +186,21 @@ func Run(ctx context.Context, agent Agent, opts Options) (Result, error) {
 		_ = cmd.Wait()
 	}()
 
-	client := &collector{onUpdate: opts.OnUpdate}
+	client := &collector{onUpdate: opts.OnUpdate, onPermission: opts.OnPermission}
+	if opts.ClientFS {
+		client.fs = &fsHandler{root: cwd}
+	}
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
 
 	if _, err := conn.Initialize(runCtx, acp.InitializeRequest{
-		ProtocolVersion:    acp.ProtocolVersionNumber,
-		ClientInfo:         &acp.Implementation{Name: "fastgit", Version: versionString()},
-		ClientCapabilities: acp.ClientCapabilities{},
+		ProtocolVersion: acp.ProtocolVersionNumber,
+		ClientInfo:      &acp.Implementation{Name: "fastgit", Version: versionString()},
+		ClientCapabilities: acp.ClientCapabilities{
+			Fs: acp.FileSystemCapabilities{
+				ReadTextFile:  opts.ClientFS,
+				WriteTextFile: opts.ClientFS,
+			},
+		},
 	}); err != nil {
 		return Result{}, wrapRunError(agent, "initialize", err, &stderr)
 	}
